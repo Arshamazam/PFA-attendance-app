@@ -1,0 +1,54 @@
+import { Controller, Post, Get, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { AttendanceService } from './attendance.service';
+import { CheckInDto } from './dto/check-in.dto';
+import { CheckOutDto } from './dto/check-out.dto';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { RolesGuard } from 'src/common/guards/roles.guard';
+import { Roles } from 'src/common/decorators/roles.decorator';
+import { CurrentUser } from 'src/common/decorators/current-user.decorator';
+
+@Controller('attendance')
+@UseGuards(JwtAuthGuard, RolesGuard)
+export class AttendanceController {
+  constructor(private readonly attendanceService: AttendanceService) {}
+
+  @Post('check-in')
+  checkIn(@Body() dto: CheckInDto, @CurrentUser() user: { id: string }) {
+    return this.attendanceService.checkIn(user.id, dto);
+  }
+
+  @Post('check-out')
+  checkOut(@Body() dto: CheckOutDto, @CurrentUser() user: { id: string }) {
+    return this.attendanceService.checkOut(user.id, dto);
+  }
+
+  @Get('my-records')
+  getMyRecords(
+    @CurrentUser() user: { id: string },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.attendanceService.getMyRecords(
+      user.id,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+
+  @Get('employee/:id')
+  @Roles('admin', 'manager')
+  getEmployeeRecords(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string; role: string },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.attendanceService.getEmployeeRecords(
+      id,
+      user.id,
+      user.role,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+    );
+  }
+}

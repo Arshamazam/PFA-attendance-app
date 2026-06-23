@@ -1,0 +1,64 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Employee {
+  id             String         @id @default(uuid())
+  name           String
+  email          String         @unique
+  password       String
+  role           String         @default("employee")
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  attendances    Attendance[]
+  leaveRequests  LeaveRequest[] @relation("EmployeeLeaveRequests")
+  approvedLeaves LeaveRequest[] @relation("ApproverLeaveRequests")
+}
+
+model GeofenceZone {
+  id           String       @id @default(uuid())
+  name         String
+  centerLat    Float
+  centerLng    Float
+  radiusMeters Float
+  active       Boolean      @default(true)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  attendances  Attendance[]
+}
+
+model Attendance {
+  id              String       @id @default(uuid())
+  employeeId      String
+  employee        Employee     @relation(fields: [employeeId], references: [id])
+  checkInTime     DateTime
+  checkInLat      Float
+  checkInLng      Float
+  checkInPhotoUrl String?
+  checkOutTime    DateTime?
+  geofenceZoneId  String
+  geofenceZone    GeofenceZone @relation(fields: [geofenceZoneId], references: [id])
+  status          String       @default("pending")
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+}
+
+model LeaveRequest {
+  id         String    @id @default(uuid())
+  employeeId String
+  employee   Employee  @relation("EmployeeLeaveRequests", fields: [employeeId], references: [id])
+  startDate  DateTime
+  endDate    DateTime
+  reason     String
+  status     String    @default("pending")
+  approvedBy String?
+  approver   Employee? @relation("ApproverLeaveRequests", fields: [approvedBy], references: [id])
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
