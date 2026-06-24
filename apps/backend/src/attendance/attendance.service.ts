@@ -15,22 +15,23 @@ export class AttendanceService {
 
   constructor(private prisma: PrismaService) {}
 
-  private async isWithinGeofence(
+  private isWithinGeofence(
     lat: number,
     lng: number,
     centerLat: number,
     centerLng: number,
     radiusMeters: number,
-  ): Promise<boolean> {
-    // Use PostGIS ST_DWithin with geography type for accurate meter-based distance
-    const result = await this.prisma.$queryRaw<[{ within: boolean }]>`
-      SELECT ST_DWithin(
-        ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
-        ST_SetSRID(ST_MakePoint(${centerLng}, ${centerLat}), 4326)::geography,
-        ${radiusMeters}
-      ) AS within
-    `;
-    return result[0].within;
+  ): boolean {
+    const R = 6371000; // Earth radius in meters
+    const dLat = ((centerLat - lat) * Math.PI) / 180;
+    const dLng = ((centerLng - lng) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat * Math.PI) / 180) *
+        Math.cos((centerLat * Math.PI) / 180) *
+        Math.sin(dLng / 2) ** 2;
+    const distanceMeters = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return distanceMeters <= radiusMeters;
   }
 
   async checkIn(employeeId: string, dto: CheckInDto) {
@@ -42,7 +43,7 @@ export class AttendanceService {
       throw new NotFoundException('Geofence zone not found or inactive');
     }
 
-    const within = await this.isWithinGeofence(
+    const within = this.isWithinGeofence(
       dto.lat,
       dto.lng,
       zone.centerLat,

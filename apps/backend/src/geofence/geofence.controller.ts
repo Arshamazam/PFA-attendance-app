@@ -11,13 +11,13 @@ export class GeofenceController {
   constructor(private readonly geofenceService: GeofenceService) {}
 
   @Get()
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'employee')
   findAll() {
     return this.geofenceService.findAll();
   }
 
   @Get(':id')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'employee')
   findOne(@Param('id') id: string) {
     return this.geofenceService.findOne(id);
   }

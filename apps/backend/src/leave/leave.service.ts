@@ -27,6 +27,7 @@ export class LeaveService {
         startDate: start,
         endDate: end,
         reason: dto.reason,
+        leaveType: dto.leaveType ?? 'Casual',
         status: 'pending',
         updatedAt: new Date(),
       },
