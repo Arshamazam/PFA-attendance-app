@@ -24,16 +24,23 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           );
           if (!res.ok) return null;
           const data = await res.json();
-          const token: string = data.token || data.access_token;
+          const accessToken: string = data.token || data.access_token;
           const employee = data.employee || data.user;
-          if (!token || !employee) return null;
-          if (!["admin", "manager"].includes(employee.role)) return null;
+          if (!accessToken || !employee) return null;
+
+          // Role lives in the JWT payload, not the employee object
+          const payload = JSON.parse(
+            Buffer.from(accessToken.split(".")[1], "base64url").toString()
+          );
+          const role: string = payload.role || employee.role || "";
+          if (!["admin", "manager"].includes(role)) return null;
+
           return {
-            id: employee.id,
+            id: employee.id ?? payload.sub,
             name: employee.name,
             email: employee.email,
-            role: employee.role as string,
-            accessToken: token,
+            role,
+            accessToken,
           };
         } catch {
           return null;

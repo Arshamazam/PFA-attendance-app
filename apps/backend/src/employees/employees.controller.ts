@@ -24,11 +24,25 @@ export class EmployeesController {
 
   @Get()
   @Roles('admin', 'manager')
-  findAll(@Query('page') page?: string, @Query('limit') limit?: string) {
+  findAll(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('role') role?: string,
+  ) {
     return this.employeesService.findAll(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
+      role,
     );
+  }
+
+  @Get('check-unique/:field/:value')
+  @Roles('admin', 'manager')
+  checkUnique(
+    @Param('field') field: 'email' | 'cnic' | 'badgeNumber',
+    @Param('value') value: string,
+  ) {
+    return this.employeesService.checkUnique(field, value);
   }
 
   @Get(':id')

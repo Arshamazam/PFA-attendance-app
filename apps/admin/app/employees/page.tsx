@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -65,6 +66,7 @@ function roleBadge(role: string) {
 }
 
 export default function EmployeesPage() {
+  const router = useRouter();
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
@@ -169,7 +171,7 @@ export default function EmployeesPage() {
             </Select>
           </div>
           <Button
-            onClick={() => setAddOpen(true)}
+            onClick={() => router.push("/employees/add")}
             className="bg-[#006B3F] hover:bg-[#005530] text-white h-9 gap-2"
           >
             <Plus className="w-4 h-4" /> Add Employee

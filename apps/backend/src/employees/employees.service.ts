@@ -15,6 +15,42 @@ const SAFE_SELECT = {
   name: true,
   email: true,
   role: true,
+  fathersName: true,
+  cnic: true,
+  dateOfBirth: true,
+  gender: true,
+  maritalStatus: true,
+  religion: true,
+  mobilePhone: true,
+  landlinePhone: true,
+  addressStreet: true,
+  addressCity: true,
+  addressDistrict: true,
+  addressPostalCode: true,
+  emergencyContactName: true,
+  emergencyContactPhone: true,
+  emergencyContactRel: true,
+  employeeCode: true,
+  dateOfJoining: true,
+  department: true,
+  designation: true,
+  serviceCadre: true,
+  grade: true,
+  salary: true,
+  reportingOfficerId: true,
+  shiftType: true,
+  employmentStatus: true,
+  bankAccount: true,
+  iban: true,
+  tfn: true,
+  pensionAccount: true,
+  officeLocation: true,
+  badgeNumber: true,
+  geofenceZoneIds: true,
+  cnicCopyUrl: true,
+  degreeCertificateUrl: true,
+  medicalCertificateUrl: true,
+  active: true,
   createdAt: true,
   updatedAt: true,
 };
@@ -25,17 +61,19 @@ export class EmployeesService {
 
   constructor(private prisma: PrismaService) {}
 
-  async findAll(page = 1, limit = 20) {
+  async findAll(page = 1, limit = 20, role?: string) {
     const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = { deletedAt: null };
+    if (role) where.role = role;
     const [employees, total] = await Promise.all([
       this.prisma.employee.findMany({
-        where: { deletedAt: null },
+        where,
         select: SAFE_SELECT,
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
       }),
-      this.prisma.employee.count({ where: { deletedAt: null } }),
+      this.prisma.employee.count({ where }),
     ]);
 
     return { data: employees, total, page, limit };
@@ -54,16 +92,32 @@ export class EmployeesService {
     return employee;
   }
 
+  async checkUnique(field: 'email' | 'cnic' | 'badgeNumber', value: string) {
+    const where: Record<string, string> = { [field]: value };
+    const existing = await this.prisma.employee.findFirst({ where });
+    return { available: !existing };
+  }
+
   async create(dto: CreateEmployeeDto) {
     const existing = await this.prisma.employee.findUnique({
       where: { email: dto.email },
     });
+    if (existing) throw new ConflictException('Email already registered');
 
-    if (existing) {
-      throw new ConflictException('Email already registered');
+    if (dto.cnic) {
+      const cnicExists = await this.prisma.employee.findFirst({ where: { cnic: dto.cnic } });
+      if (cnicExists) throw new ConflictException('CNIC already registered');
+    }
+
+    if (dto.badgeNumber) {
+      const badgeExists = await this.prisma.employee.findFirst({ where: { badgeNumber: dto.badgeNumber } });
+      if (badgeExists) throw new ConflictException('Badge number already in use');
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
+
+    // Auto-generate employee code if not provided
+    const employeeCode = dto.employeeCode || `EMP-${Date.now().toString().slice(-6)}`;
 
     const employee = await this.prisma.employee.create({
       data: {
@@ -71,11 +125,47 @@ export class EmployeesService {
         email: dto.email,
         password: hashedPassword,
         role: dto.role ?? 'employee',
+        fathersName: dto.fathersName,
+        cnic: dto.cnic,
+        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
+        gender: dto.gender,
+        maritalStatus: dto.maritalStatus,
+        religion: dto.religion,
+        mobilePhone: dto.mobilePhone,
+        landlinePhone: dto.landlinePhone,
+        addressStreet: dto.addressStreet,
+        addressCity: dto.addressCity,
+        addressDistrict: dto.addressDistrict,
+        addressPostalCode: dto.addressPostalCode,
+        emergencyContactName: dto.emergencyContactName,
+        emergencyContactPhone: dto.emergencyContactPhone,
+        emergencyContactRel: dto.emergencyContactRel,
+        employeeCode,
+        dateOfJoining: dto.dateOfJoining ? new Date(dto.dateOfJoining) : undefined,
+        department: dto.department,
+        designation: dto.designation,
+        serviceCadre: dto.serviceCadre,
+        grade: dto.grade,
+        salary: dto.salary ? dto.salary : undefined,
+        reportingOfficerId: dto.reportingOfficerId,
+        shiftType: dto.shiftType,
+        employmentStatus: dto.employmentStatus ?? 'Active',
+        bankAccount: dto.bankAccount,
+        iban: dto.iban,
+        tfn: dto.tfn,
+        pensionAccount: dto.pensionAccount,
+        officeLocation: dto.officeLocation,
+        badgeNumber: dto.badgeNumber,
+        geofenceZoneIds: dto.geofenceZoneIds ?? [],
+        cnicCopyUrl: dto.cnicCopyUrl,
+        degreeCertificateUrl: dto.degreeCertificateUrl,
+        medicalCertificateUrl: dto.medicalCertificateUrl,
+        active: dto.active ?? true,
       },
       select: SAFE_SELECT,
     });
 
-    this.logger.log(`Employee created: ${employee.email}`);
+    this.logger.log(`Employee created: ${employee.email} (${employee.employeeCode})`);
     return employee;
   }
 

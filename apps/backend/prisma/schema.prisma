@@ -8,17 +8,59 @@ datasource db {
 }
 
 model Employee {
-  id             String         @id @default(uuid())
-  name           String
-  email          String         @unique
-  password       String
-  role           String         @default("employee")
-  deletedAt      DateTime?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-  attendances    Attendance[]
-  leaveRequests  LeaveRequest[] @relation("EmployeeLeaveRequests")
-  approvedLeaves LeaveRequest[] @relation("ApproverLeaveRequests")
+  id                    String         @id @default(uuid())
+  name                  String
+  email                 String         @unique
+  password              String
+  role                  String         @default("employee")
+  // Personal
+  fathersName           String?
+  cnic                  String?        @unique
+  dateOfBirth           DateTime?
+  gender                String?
+  maritalStatus         String?
+  religion              String?
+  // Contact
+  mobilePhone           String?
+  landlinePhone         String?
+  addressStreet         String?
+  addressCity           String?
+  addressDistrict       String?
+  addressPostalCode     String?
+  emergencyContactName  String?
+  emergencyContactPhone String?
+  emergencyContactRel   String?
+  // Employment
+  employeeCode          String?        @unique
+  dateOfJoining         DateTime?
+  department            String?
+  designation           String?
+  serviceCadre          String?
+  grade                 String?
+  salary                Decimal?
+  reportingOfficerId    String?
+  shiftType             String?
+  employmentStatus      String?        @default("Active")
+  // Official
+  bankAccount           String?
+  iban                  String?
+  tfn                   String?
+  pensionAccount        String?
+  officeLocation        String?
+  badgeNumber           String?        @unique
+  geofenceZoneIds       String[]       @default([])
+  // Documents
+  cnicCopyUrl           String?
+  degreeCertificateUrl  String?
+  medicalCertificateUrl String?
+  // System
+  active                Boolean        @default(true)
+  deletedAt             DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  attendances           Attendance[]
+  leaveRequests         LeaveRequest[] @relation("EmployeeLeaveRequests")
+  approvedLeaves        LeaveRequest[] @relation("ApproverLeaveRequests")
 }
 
 model GeofenceZone {
