@@ -35,6 +35,24 @@ export class AttendanceController {
     );
   }
 
+  @Get('all')
+  @Roles('admin', 'manager')
+  getAllRecords(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('employeeId') employeeId?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.attendanceService.getAllRecords(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 20,
+      employeeId,
+      startDate,
+      endDate,
+    );
+  }
+
   @Get('employee/:id')
   @Roles('admin', 'manager')
   getEmployeeRecords(
