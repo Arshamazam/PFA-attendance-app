@@ -45,7 +45,8 @@ export class CreateEmployeeDto {
   badgeNumber?: string;
   geofenceZoneIds?: string[];
 
-  // Documents
+  // Documents & Media
+  profilePhotoUrl?: string;
   cnicCopyUrl?: string;
   degreeCertificateUrl?: string;
   medicalCertificateUrl?: string;

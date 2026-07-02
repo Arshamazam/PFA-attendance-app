@@ -26,10 +26,10 @@ class AttendanceRecord {
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     final checkInTime = json['checkInTime'] != null
-        ? DateTime.tryParse(json['checkInTime'] as String)
+        ? DateTime.tryParse(json['checkInTime'] as String)?.toLocal()
         : null;
     final checkOutTime = json['checkOutTime'] != null
-        ? DateTime.tryParse(json['checkOutTime'] as String)
+        ? DateTime.tryParse(json['checkOutTime'] as String)?.toLocal()
         : null;
     // derive isLate from check-in hour (cutoff 9:00 AM) if not in payload
     final isLate = json['isLate'] is bool

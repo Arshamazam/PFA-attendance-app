@@ -49,30 +49,52 @@ model Employee {
   officeLocation        String?
   badgeNumber           String?        @unique
   geofenceZoneIds       String[]       @default([])
-  // Documents
+  // Documents & Media
+  profilePhotoUrl       String?
   cnicCopyUrl           String?
   degreeCertificateUrl  String?
   medicalCertificateUrl String?
+  // Geofence exemption
+  requiresGeofence      Boolean        @default(true)
+  geofenceExemptReason  String?
+  geofenceExemptedAt    DateTime?
+  geofenceExemptedBy    String?
   // System
   active                Boolean        @default(true)
   deletedAt             DateTime?
   createdAt             DateTime       @default(now())
   updatedAt             DateTime       @updatedAt
   attendances           Attendance[]
-  leaveRequests         LeaveRequest[] @relation("EmployeeLeaveRequests")
-  approvedLeaves        LeaveRequest[] @relation("ApproverLeaveRequests")
+  leaveRequests         LeaveRequest[]       @relation("EmployeeLeaveRequests")
+  approvedLeaves        LeaveRequest[]       @relation("ApproverLeaveRequests")
+  officerLeaves         LeaveRequest[]       @relation("ReportingOfficerLeaves")
+  transfers             EmployeeTransfer[]   @relation("TransferEmployee")
+  approvedTransfers     EmployeeTransfer[]   @relation("TransferApprover")
+  categoryId            String?
+  category              EmployeeCategory?    @relation(fields: [categoryId], references: [id])
+  performanceGoals      PerformanceGoal[]
+  performanceReviews    PerformanceReview[]  @relation("EmployeeReviews")
+  leaveBalances         LeaveBalance[]
+  notifications         Notification[]
 }
 
 model GeofenceZone {
-  id           String       @id @default(uuid())
-  name         String
-  centerLat    Float
-  centerLng    Float
-  radiusMeters Float
-  active       Boolean      @default(true)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
-  attendances  Attendance[]
+  id                   String       @id @default(uuid())
+  name                 String
+  centerLat            Float
+  centerLng            Float
+  radiusMeters         Float
+  boundaryType         String       @default("circle")
+  boundaryPoints       Json?
+  hotspots             Json?
+  enforcementLevel     String       @default("strict")
+  bufferZone           Int          @default(30)
+  gpsAccuracyThreshold Int          @default(50)
+  gracePeriod          Int          @default(5)
+  active               Boolean      @default(true)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  attendances          Attendance[]
 }
 
 model Attendance {
@@ -82,13 +104,225 @@ model Attendance {
   checkInTime     DateTime
   checkInLat      Float
   checkInLng      Float
-  checkInPhotoUrl String?
-  checkOutTime    DateTime?
-  geofenceZoneId  String
-  geofenceZone    GeofenceZone @relation(fields: [geofenceZoneId], references: [id])
+  checkInPhotoUrl  String?
+  checkOutTime     DateTime?
+  checkOutPhotoUrl String?
+  lateReason       String?
+  lateReasonNotes  String?
+  geofenceZoneId  String?
+  geofenceZone    GeofenceZone? @relation(fields: [geofenceZoneId], references: [id])
   status          String       @default("pending")
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+}
+
+model EmployeeTransfer {
+  id             String    @id @default(uuid())
+  employeeId     String
+  employee       Employee  @relation("TransferEmployee", fields: [employeeId], references: [id])
+  fromDepartment String
+  toDepartment   String
+  transferDate   DateTime
+  approvedBy     String?
+  approver       Employee? @relation("TransferApprover", fields: [approvedBy], references: [id])
+  status         String    @default("Pending")
+  reason         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model PerformanceGoal {
+  id              String   @id @default(uuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  goalTitle       String
+  targetValue     Float
+  currentProgress Float    @default(0)
+  startDate       DateTime
+  endDate         DateTime
+  status          String   @default("In Progress")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Notification {
+  id                String    @id @default(uuid())
+  type              String
+  title             String
+  message           String
+  relatedEmployeeId String?
+  relatedEmployee   Employee? @relation(fields: [relatedEmployeeId], references: [id])
+  severity          String    @default("Info")
+  isRead            Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+}
+
+model Announcement {
+  id               String    @id @default(uuid())
+  title            String
+  description      String
+  content          String
+  type             String
+  priority         String
+  targetAudience   String    @default("All")
+  targetDepartment String?
+  scheduledDate    DateTime
+  scheduledTime    String    @default("00:00")
+  expiryDate       DateTime?
+  imageUrl         String?
+  isActive         Boolean   @default(true)
+  isPublished      Boolean   @default(false)
+  autoPublish      Boolean   @default(true)
+  publishedAt      DateTime?
+  views            Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
+
+model EmployeeCategory {
+  id          String     @id @default(uuid())
+  name        String     @unique
+  description String?
+  isActive    Boolean    @default(true)
+  // Leave allocations (days per fiscal year; 0 = unlimited for unpaid)
+  annualLeaves        Int @default(20)
+  casualLeaves        Int @default(8)
+  medicalLeaves       Int @default(5)
+  sickLeaves          Int @default(10)
+  extraordinaryLeaves Int @default(2)
+  earnedLeaves        Int @default(5)
+  compensatoryLeaves  Int @default(3)
+  unpaidLeaves        Int @default(0)
+  // Policy
+  requiresApproval   Boolean @default(true)
+  carryForwardLimit  Int     @default(5)
+  maxConsecutiveDays Int     @default(30)
+  advanceNoticeDays  Int     @default(3)
+  employees          Employee[]
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model LeaveBalance {
+  id                String   @id @default(uuid())
+  employeeId        String
+  employee          Employee @relation(fields: [employeeId], references: [id])
+  leaveType         String
+  fiscalYear        String
+  totalAllocation   Int      @default(0)
+  carriedForward    Int      @default(0)
+  totalUsed         Int      @default(0)
+  balanceRemaining  Int      @default(0)
+  lastUpdatedBy     String?
+  lastUpdateReason  String?
+  deductionLogs     LeaveDeductionLog[]
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([employeeId, leaveType, fiscalYear])
+  @@index([employeeId, fiscalYear])
+}
+
+model LeaveDeductionLog {
+  id             String       @id @default(uuid())
+  employeeId     String
+  leaveType      String
+  leaveRequestId String?
+  balanceId      String
+  balance        LeaveBalance @relation(fields: [balanceId], references: [id])
+  deductionType  String
+  daysDeducted   Int
+  balanceBefore  Int
+  balanceAfter   Int
+  actionBy       String?
+  reason         String?
+  isReversed     Boolean  @default(false)
+  reversalId     String?
+  reversedAt     DateTime?
+  reversedBy     String?
+  reversalReason String?
+  createdAt      DateTime @default(now())
+
+  @@index([employeeId])
+  @@index([balanceId])
+}
+
+model ReviewCriteria {
+  id           String        @id @default(uuid())
+  name         String
+  description  String?
+  weight       Float
+  displayOrder Int           @default(0)
+  isActive     Boolean       @default(true)
+  scores       ReviewScore[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model PerformanceReview {
+  id           String        @id @default(uuid())
+  employeeId   String
+  employee     Employee      @relation("EmployeeReviews", fields: [employeeId], references: [id])
+  reviewerId   String
+  reviewerName String?
+  reviewDate   DateTime
+  reviewPeriod String
+  status       String        @default("draft")
+  overallScore Float?
+  strengths    String?
+  improvements String?
+  comments     String?
+  scores       ReviewScore[]
+  submittedAt  DateTime?
+  approvedAt   DateTime?
+  approvedById String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@index([employeeId])
+  @@index([status])
+}
+
+model ReviewScore {
+  id         String            @id @default(uuid())
+  reviewId   String
+  review     PerformanceReview @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  criteriaId String
+  criteria   ReviewCriteria    @relation(fields: [criteriaId], references: [id])
+  score      Int
+  feedback   String?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([reviewId, criteriaId])
+}
+
+model DropdownMaster {
+  id           String          @id @default(uuid())
+  fieldName    String
+  fieldLabel   String
+  fieldType    String
+  displayOrder Int             @default(0)
+  isActive     Boolean         @default(true)
+  values       DropdownValue[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([fieldType, isActive])
+}
+
+model DropdownValue {
+  id           String         @id @default(uuid())
+  dropdownId   String
+  dropdown     DropdownMaster @relation(fields: [dropdownId], references: [id], onDelete: Cascade)
+  value        String
+  label        String
+  displayOrder Int            @default(0)
+  isActive     Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([dropdownId, isActive])
 }
 
 model LeaveRequest {
@@ -99,9 +333,17 @@ model LeaveRequest {
   endDate    DateTime
   reason     String
   leaveType  String    @default("Casual")
-  status     String    @default("pending")
-  approvedBy String?
-  approver   Employee? @relation("ApproverLeaveRequests", fields: [approvedBy], references: [id])
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  status              String    @default("pending")
+  approvedBy          String?
+  approver            Employee? @relation("ApproverLeaveRequests", fields: [approvedBy], references: [id])
+  approvedAt          DateTime?
+  rejectionReason     String?
+  reportingOfficerId  String?
+  reportingOfficer    Employee? @relation("ReportingOfficerLeaves", fields: [reportingOfficerId], references: [id], onDelete: SetNull)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  @@index([employeeId])
+  @@index([reportingOfficerId])
+  @@index([status])
 }

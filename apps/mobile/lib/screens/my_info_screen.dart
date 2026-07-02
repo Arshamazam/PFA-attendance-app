@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../providers/auth_provider.dart';
+import '../services/api_service.dart';
 import 'login_screen.dart';
 
 class MyInfoScreen extends StatelessWidget {
@@ -17,6 +18,7 @@ class MyInfoScreen extends StatelessWidget {
     final email = user?.email ?? '';
     final role = user?.role ?? 'employee';
     final initial = name.isNotEmpty ? name[0].toUpperCase() : 'E';
+    final photoUrl = user?.profilePhotoUrl;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -50,6 +52,7 @@ class MyInfoScreen extends StatelessWidget {
                       email: email,
                       role: role,
                       initial: initial,
+                      photoUrl: photoUrl,
                     ),
 
                     const SizedBox(height: 16),
@@ -83,13 +86,26 @@ class _ProfileCard extends StatelessWidget {
   final String email;
   final String role;
   final String initial;
+  final String? photoUrl;
+
+  static String get _adminBase => ApiService.baseUrl.replaceFirst(':3000', ':3001');
+  static String get _backendBase => ApiService.baseUrl;
 
   const _ProfileCard({
     required this.name,
     required this.email,
     required this.role,
     required this.initial,
+    this.photoUrl,
   });
+
+  String? _resolvePhotoUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('http')) return url;
+    // Attendance photos live on backend; profile photos on admin panel
+    if (url.startsWith('/uploads/attendance')) return '$_backendBase$url';
+    return '$_adminBase$url';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -103,35 +119,59 @@ class _ProfileCard extends StatelessWidget {
         child: Column(
           children: [
             // Avatar
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF003D2E), Color(0xFF006B3F)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+            Builder(builder: (ctx) {
+              final resolved = _resolvePhotoUrl(photoUrl);
+              return Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: resolved == null
+                      ? const LinearGradient(
+                          colors: [Color(0xFF003D2E), Color(0xFF006B3F)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : null,
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF006B3F).withValues(alpha: 0.3),
+                      blurRadius: 16,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF006B3F).withValues(alpha: 0.3),
-                    blurRadius: 16,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
-              child: Center(
-                child: Text(
-                  initial,
-                  style: GoogleFonts.poppins(
-                    color: Colors.white,
-                    fontSize: 38,
-                    fontWeight: FontWeight.w700,
-                  ),
+                child: ClipOval(
+                  child: resolved != null
+                      ? Image.network(
+                          resolved,
+                          width: 100,
+                          height: 100,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Center(
+                            child: Text(
+                              initial,
+                              style: GoogleFonts.poppins(
+                                color: Colors.white,
+                                fontSize: 38,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        )
+                      : Center(
+                          child: Text(
+                            initial,
+                            style: GoogleFonts.poppins(
+                              color: Colors.white,
+                              fontSize: 38,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
                 ),
-              ),
-            ),
+              );
+            }),
 
             const SizedBox(height: 16),
 

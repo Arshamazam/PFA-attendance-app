@@ -7,9 +7,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/geofence_zone.dart';
 import '../providers/attendance_provider.dart';
+import '../providers/auth_provider.dart';
 import '../providers/geofence_provider.dart';
 
-enum _Step { locating, validating, outsideZone, camera, reviewing, submitting }
+enum _Step { locating, validating, verified, outsideZone, camera, reviewing, submitting }
 
 class CheckInScreen extends StatefulWidget {
   const CheckInScreen({super.key});
@@ -25,6 +26,8 @@ class _CheckInScreenState extends State<CheckInScreen> {
   CameraController? _cameraCtrl;
   XFile? _photo;
   String? _errorMessage;
+  bool _isExempted = false;
+  int _verificationScore = 0;
 
   // Fallback to image_picker when no physical camera (e.g. simulator)
   bool _usePickerFallback = false;
@@ -46,13 +49,51 @@ class _CheckInScreenState extends State<CheckInScreen> {
   // ─── Flow steps ─────────────────────────────────────────────────────────────
 
   Future<void> _startFlow() async {
-    setState(() => _step = _Step.locating);
+    setState(() { _step = _Step.locating; _isExempted = false; });
     try {
       // 1. Ensure location permission
       LocationPermission perm = await Geolocator.checkPermission();
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
+
+      // 2. Get current position (best-effort — exempted employees don't strictly need it)
+      Position? position;
+      if (perm != LocationPermission.denied && perm != LocationPermission.deniedForever) {
+        position = await Geolocator.getCurrentPosition(
+          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+        );
+      }
+      _position = position;
+
+      // 3. Fetch live geofence status (requiresGeofence + current geofenceZoneIds)
+      if (!mounted) return;
+      setState(() => _step = _Step.validating);
+      final employeeId = context.read<AuthProvider>().user?.id;
+      bool requiresGeofence = true;
+      List<String> liveZoneIds = [];
+      if (employeeId != null) {
+        try {
+          final status = await context.read<AttendanceProvider>().api.getGeofenceStatus(employeeId);
+          requiresGeofence = status['requiresGeofence'] as bool? ?? true;
+          liveZoneIds = (status['geofenceZoneIds'] as List<dynamic>?)
+                ?.map((e) => e.toString())
+                .toList() ?? [];
+        } catch (_) {
+          requiresGeofence = true; // fail safe: require geofence if check fails
+        }
+      }
+
+      if (!requiresGeofence) {
+        // Exempted — skip geofence validation entirely
+        _isExempted = true;
+        await _initCamera();
+        if (!mounted) return;
+        setState(() => _step = _Step.camera);
+        return;
+      }
+
+      // 4. Not exempted — enforce location permission
       if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
         setState(() {
           _errorMessage = 'Location permission is required to check in.\nPlease enable it in Settings.';
@@ -60,31 +101,57 @@ class _CheckInScreenState extends State<CheckInScreen> {
         });
         return;
       }
+      if (position == null) {
+        setState(() {
+          _errorMessage = 'Could not get your location. Please try again.';
+          _step = _Step.outsideZone;
+        });
+        return;
+      }
 
-      // 2. Get current position
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-      );
-      _position = position;
-
-      // 3. Fetch and validate geofence
-      if (!mounted) return;
-      setState(() => _step = _Step.validating);
+      // 5. Validate geofence zone using live zone IDs (not stale cached user data)
       final geofenceProvider = context.read<GeofenceProvider>();
       await geofenceProvider.fetchGeofences();
       if (!mounted) return;
 
-      final matched = geofenceProvider.matchingZone(position.latitude, position.longitude);
+      // If no zones are assigned to this employee yet, show a clear message
+      if (liveZoneIds.isEmpty) {
+        setState(() {
+          _errorMessage = 'No office zone has been assigned to your profile.\nPlease contact your administrator.';
+          _step = _Step.outsideZone;
+        });
+        return;
+      }
+
+      final matched = geofenceProvider.matchingZone(
+        position.latitude,
+        position.longitude,
+        allowedZoneIds: liveZoneIds,
+      );
       if (matched == null) {
         setState(() {
-          _errorMessage = 'You are outside the office premises.\nPlease come to the office to check in.';
+          _errorMessage = 'You are outside your assigned office zone.\nPlease go to your designated office location to check in.';
           _step = _Step.outsideZone;
         });
         return;
       }
       _matchedZone = matched;
 
-      // 4. Init camera
+      // 6. Compute verification score (UI only — backend enforces)
+      int score = 60; // in boundary
+      final accuracy = position.accuracy;
+      if (accuracy <= 10) score += 40;
+      else if (accuracy <= 20) score += 30;
+      else if (accuracy <= 50) score += 15;
+      else score += 5;
+      _verificationScore = score;
+
+      // 7. Show verified step briefly, then init camera
+      if (!mounted) return;
+      setState(() => _step = _Step.verified);
+      await Future.delayed(const Duration(milliseconds: 1500));
+
+      // 8. Init camera
       await _initCamera();
       if (!mounted) return;
       setState(() => _step = _Step.camera);
@@ -255,9 +322,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
     setState(() => _step = _Step.submitting);
     try {
       await context.read<AttendanceProvider>().checkIn(
-        latitude: _position!.latitude,
-        longitude: _position!.longitude,
-        geofenceZoneId: _matchedZone!.id,
+        latitude: _position?.latitude ?? 0,
+        longitude: _position?.longitude ?? 0,
+        gpsAccuracy: _position?.accuracy,
+        geofenceZoneId: _isExempted ? null : _matchedZone?.id,
         lateReason: lateReason,
         lateReasonNotes: lateReasonNotes,
         photoPath: _photo?.path,
@@ -297,6 +365,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
       body: switch (_step) {
         _Step.locating => _buildLoading('Getting your location...'),
         _Step.validating => _buildLoading('Validating office location...'),
+        _Step.verified => _buildVerified(),
         _Step.outsideZone => _buildError(),
         _Step.camera => _buildCamera(),
         _Step.reviewing => _buildReview(),
@@ -320,6 +389,91 @@ class _CheckInScreenState extends State<CheckInScreen> {
                       message,
                       style: GoogleFonts.roboto(color: Colors.white70, fontSize: 14),
                     ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildVerified() => SafeArea(
+        child: Column(
+          children: [
+            _backBar(),
+            Expanded(
+              child: Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(32),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 80,
+                      height: 80,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFE6F4EE),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.verified_rounded, color: _primary, size: 44),
+                    ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'Location Verified',
+                      style: GoogleFonts.poppins(
+                          fontSize: 20, fontWeight: FontWeight.w700, color: const Color(0xFF222222)),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _matchedZone?.name ?? 'Office Zone',
+                      style: GoogleFonts.roboto(fontSize: 14, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 24),
+                    // Score ring
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        SizedBox(
+                          width: 96,
+                          height: 96,
+                          child: CircularProgressIndicator(
+                            value: _verificationScore / 100,
+                            strokeWidth: 8,
+                            backgroundColor: Colors.grey.shade200,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              _verificationScore >= 80
+                                  ? _primary
+                                  : _verificationScore >= 50
+                                      ? Colors.orange
+                                      : Colors.red.shade400,
+                            ),
+                          ),
+                        ),
+                        Column(
+                          children: [
+                            Text(
+                              '$_verificationScore',
+                              style: GoogleFonts.poppins(
+                                  fontSize: 22, fontWeight: FontWeight.w800, color: _primary),
+                            ),
+                            Text('/ 100',
+                                style: GoogleFonts.roboto(fontSize: 11, color: Colors.grey)),
+                          ],
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'GPS Accuracy Score',
+                      style: GoogleFonts.roboto(fontSize: 12, color: Colors.grey.shade500),
+                    ),
+                    const SizedBox(height: 8),
+                    if (_position != null)
+                      Text(
+                        'Accuracy: ±${_position!.accuracy.toStringAsFixed(0)}m',
+                        style: GoogleFonts.roboto(
+                            fontSize: 11, color: Colors.grey.shade400, fontStyle: FontStyle.italic),
+                      ),
                   ],
                 ),
               ),
@@ -408,6 +562,25 @@ class _CheckInScreenState extends State<CheckInScreen> {
                         textAlign: TextAlign.center,
                         style: GoogleFonts.roboto(color: Colors.white60, fontSize: 14),
                       ),
+                      if (_isExempted) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.shield_outlined, color: Colors.white, size: 14),
+                              const SizedBox(width: 6),
+                              Text('Geofence Exempted',
+                                style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 32),
                       ElevatedButton.icon(
                         onPressed: _capturePhoto,
@@ -465,30 +638,49 @@ class _CheckInScreenState extends State<CheckInScreen> {
           ),
         ),
 
-        // Zone indicator
+        // Zone indicator (or exemption badge)
         Positioned(
           top: 80,
           left: 0,
           right: 0,
           child: Center(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-              decoration: BoxDecoration(
-                color: _primary.withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.location_on, color: Colors.white, size: 14),
-                  const SizedBox(width: 4),
-                  Text(
-                    _matchedZone?.name ?? 'Office',
-                    style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+            child: _isExempted
+                ? Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.orange.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.shield_outlined, color: Colors.white, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Geofence Exempted',
+                          style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  )
+                : Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: _primary.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.location_on, color: Colors.white, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          _matchedZone?.name ?? 'Office',
+                          style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
           ),
         ),
 

@@ -2,379 +2,154 @@
 
 import { useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
+import dynamic from "next/dynamic";
 import api from "@/lib/api";
 import type { GeofenceZone } from "@/types";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, ToggleLeft, ToggleRight } from "lucide-react";
+import { Eye, MapPin, RefreshCw, Loader2 } from "lucide-react";
+import { format, parseISO } from "date-fns";
 
-const EMPTY_FORM = {
-  name: "",
-  centerLat: "",
-  centerLng: "",
-  radiusMeters: "",
-};
+const GeofenceMap = dynamic(() => import("@/components/GeofenceMap"), { ssr: false });
+
+interface CheckIn { id: string; checkInLat: number; checkInLng: number; checkInTime: string; employee?: { name: string }; }
+interface ZoneWithCount extends GeofenceZone { totalCheckIns?: number; }
+
+function ZoneCard({ zone, onView }: { zone: ZoneWithCount; onView: () => void }) {
+  return (
+    <div className={`bg-white rounded-xl border shadow-sm p-5 transition-all ${zone.active ? "border-gray-100" : "border-gray-200 opacity-70"}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${zone.active ? "bg-green-50" : "bg-gray-100"}`}>
+            <MapPin className={`w-5 h-5 ${zone.active ? "text-[#006B3F]" : "text-gray-400"}`} />
+          </div>
+          <div>
+            <h3 className="font-semibold text-gray-900">{zone.name}</h3>
+            <p className="text-xs text-gray-400">{zone.centerLat?.toFixed(5)}, {zone.centerLng?.toFixed(5)}</p>
+          </div>
+        </div>
+        <Badge variant="outline" className={zone.active ? "bg-green-50 text-green-700 border-green-200 text-xs" : "bg-gray-100 text-gray-500 border-gray-200 text-xs"}>
+          {zone.active ? "Active" : "Inactive"}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-gray-100">
+        <div className="text-center"><p className="text-xs text-gray-400">Radius</p><p className="font-semibold text-sm">{zone.radiusMeters}m</p></div>
+        <div className="text-center"><p className="text-xs text-gray-400">Check-ins</p><p className="font-semibold text-sm">{zone.totalCheckIns ?? 0}</p></div>
+        <div className="text-center"><p className="text-xs text-gray-400">Created</p><p className="font-semibold text-sm">{format(parseISO(zone.createdAt), "dd MMM")}</p></div>
+      </div>
+
+      <div className="mt-4 pt-3 border-t border-gray-100">
+        <Button size="sm" variant="outline" className="w-full gap-1.5 text-xs h-8" onClick={onView}>
+          <Eye className="w-3.5 h-3.5" /> View Details & Check-ins
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 export default function GeofencesPage() {
-  const qc = useQueryClient();
-  const [search, setSearch] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
-  const [editOpen, setEditOpen] = useState(false);
-  const [editTarget, setEditTarget] = useState<GeofenceZone | null>(null);
-  const [editForm, setEditForm] = useState(EMPTY_FORM);
-  const [deleteTarget, setDeleteTarget] = useState<GeofenceZone | null>(null);
+  const [viewOpen, setViewOpen] = useState(false);
+  const [viewTarget, setViewTarget] = useState<ZoneWithCount | null>(null);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
+  const [loadingCheckIns, setLoadingCheckIns] = useState(false);
 
-  const { data: zones = [], isLoading } = useQuery({
+  const { data: zones = [], isLoading, refetch } = useQuery<ZoneWithCount[]>({
     queryKey: ["geofences"],
-    queryFn: () =>
-      api.get<GeofenceZone[]>("/geofence").then((r) =>
-        Array.isArray(r.data) ? r.data : []
-      ),
+    queryFn: () => api.get("/geofence").then((r) => r.data as ZoneWithCount[]),
   });
 
-  const filtered = zones.filter((z) =>
-    z.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const createMutation = useMutation({
-    mutationFn: (body: { name: string; centerLat: number; centerLng: number; radiusMeters: number }) =>
-      api.post("/geofence", body),
-    onSuccess: () => {
-      toast.success("Geofence zone created");
-      qc.invalidateQueries({ queryKey: ["geofences"] });
-      setAddOpen(false);
-      setForm(EMPTY_FORM);
-    },
-    onError: (e: { response?: { data?: { message?: string } } }) =>
-      toast.error(e.response?.data?.message ?? "Failed to create zone"),
-  });
-
-  const updateMutation = useMutation({
-    mutationFn: ({
-      id,
-      body,
-    }: {
-      id: string;
-      body: { name: string; centerLat: number; centerLng: number; radiusMeters: number };
-    }) => api.patch(`/geofence/${id}`, body),
-    onSuccess: () => {
-      toast.success("Geofence updated");
-      qc.invalidateQueries({ queryKey: ["geofences"] });
-      setEditOpen(false);
-    },
-    onError: () => toast.error("Failed to update zone"),
-  });
-
-  const toggleMutation = useMutation({
-    mutationFn: ({ id, active }: { id: string; active: boolean }) =>
-      api.patch(`/geofence/${id}/${active ? "activate" : "deactivate"}`),
-    onSuccess: () => {
-      toast.success("Status updated");
-      qc.invalidateQueries({ queryKey: ["geofences"] });
-    },
-    onError: () => toast.error("Failed to update status"),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (id: string) => api.delete(`/geofence/${id}`),
-    onSuccess: () => {
-      toast.success("Geofence deleted");
-      qc.invalidateQueries({ queryKey: ["geofences"] });
-      setDeleteTarget(null);
-    },
-    onError: () => toast.error("Failed to delete geofence"),
-  });
-
-  function openEdit(zone: GeofenceZone) {
-    setEditTarget(zone);
-    setEditForm({
-      name: zone.name,
-      centerLat: String(zone.centerLat),
-      centerLng: String(zone.centerLng),
-      radiusMeters: String(zone.radiusMeters),
-    });
-    setEditOpen(true);
+  async function openView(z: ZoneWithCount) {
+    setViewTarget(z); setLoadingCheckIns(true); setCheckIns([]); setViewOpen(true);
+    try {
+      const res = await api.get<CheckIn[]>(`/geofence/${z.id}/check-ins`);
+      setCheckIns(res.data);
+    } catch {
+      toast.error("Failed to load check-ins");
+    } finally { setLoadingCheckIns(false); }
   }
-
-  function submitCreate() {
-    createMutation.mutate({
-      name: form.name,
-      centerLat: parseFloat(form.centerLat),
-      centerLng: parseFloat(form.centerLng),
-      radiusMeters: parseFloat(form.radiusMeters),
-    });
-  }
-
-  function submitEdit() {
-    if (!editTarget) return;
-    updateMutation.mutate({
-      id: editTarget.id,
-      body: {
-        name: editForm.name,
-        centerLat: parseFloat(editForm.centerLat),
-        centerLng: parseFloat(editForm.centerLng),
-        radiusMeters: parseFloat(editForm.radiusMeters),
-      },
-    });
-  }
-
-  const formFields = (f: typeof EMPTY_FORM, set: (v: typeof EMPTY_FORM) => void) => (
-    <>
-      <div className="space-y-1">
-        <Label>Zone Name</Label>
-        <Input
-          value={f.name}
-          onChange={(e) => set({ ...f, name: e.target.value })}
-          placeholder="e.g. PFA Headquarters"
-        />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <Label>Center Latitude</Label>
-          <Input
-            type="number"
-            step="any"
-            value={f.centerLat}
-            onChange={(e) => set({ ...f, centerLat: e.target.value })}
-            placeholder="31.5204"
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>Center Longitude</Label>
-          <Input
-            type="number"
-            step="any"
-            value={f.centerLng}
-            onChange={(e) => set({ ...f, centerLng: e.target.value })}
-            placeholder="74.3587"
-          />
-        </div>
-      </div>
-      <div className="space-y-1">
-        <Label>Radius (meters)</Label>
-        <Input
-          type="number"
-          value={f.radiusMeters}
-          onChange={(e) => set({ ...f, radiusMeters: e.target.value })}
-          placeholder="100"
-        />
-      </div>
-    </>
-  );
 
   return (
-    <DashboardLayout title="Geofences">
-      <div className="space-y-4">
-        {/* Toolbar */}
-        <div className="flex gap-3 items-center justify-between">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <Input
-              placeholder="Search by name..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 h-9"
-            />
+    <DashboardLayout title="Geofence Zones">
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm text-gray-400">{zones.length} zone{zones.length !== 1 ? "s" : ""} configured</p>
           </div>
-          <Button
-            onClick={() => setAddOpen(true)}
-            className="bg-[#006B3F] hover:bg-[#005530] text-white h-9 gap-2"
-          >
-            <Plus className="w-4 h-4" /> Create Geofence
+          <Button variant="outline" size="sm" className="gap-1.5" onClick={() => refetch()}>
+            <RefreshCw className="w-3.5 h-3.5" /> Refresh
           </Button>
         </div>
 
-        {/* Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-gray-50 hover:bg-gray-50">
-                <TableHead className="text-xs font-semibold">Name</TableHead>
-                <TableHead className="text-xs font-semibold">Latitude</TableHead>
-                <TableHead className="text-xs font-semibold">Longitude</TableHead>
-                <TableHead className="text-xs font-semibold">Radius (m)</TableHead>
-                <TableHead className="text-xs font-semibold">Status</TableHead>
-                <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 6 }).map((__, j) => (
-                      <TableCell key={j}>
-                        <div className="h-4 bg-gray-100 rounded animate-pulse" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : filtered.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="text-center py-12 text-gray-400">
-                    No geofence zones found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                filtered.map((zone) => (
-                  <TableRow key={zone.id} className="hover:bg-gray-50">
-                    <TableCell className="font-medium text-sm">{zone.name}</TableCell>
-                    <TableCell className="text-sm text-gray-600 font-mono">
-                      {zone.centerLat.toFixed(4)}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-600 font-mono">
-                      {zone.centerLng.toFixed(4)}
-                    </TableCell>
-                    <TableCell className="text-sm text-gray-600">
-                      {zone.radiusMeters.toLocaleString()} m
-                    </TableCell>
-                    <TableCell>
-                      <Badge
-                        variant="outline"
-                        className={
-                          zone.active
-                            ? "bg-green-50 text-green-700 border-green-200"
-                            : "bg-gray-50 text-gray-500 border-gray-200"
-                        }
-                      >
-                        {zone.active ? "Active" : "Inactive"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-gray-500 hover:text-[#006B3F] hover:bg-green-50"
-                          title={zone.active ? "Deactivate" : "Activate"}
-                          onClick={() =>
-                            toggleMutation.mutate({ id: zone.id, active: !zone.active })
-                          }
-                        >
-                          {zone.active ? (
-                            <ToggleRight className="w-4 h-4 text-green-600" />
-                          ) : (
-                            <ToggleLeft className="w-4 h-4" />
-                          )}
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => openEdit(zone)}
-                        >
-                          <Pencil className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                          onClick={() => setDeleteTarget(zone)}
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
+        {/* Zone Grid */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-48 bg-gray-100 rounded-xl animate-pulse" />)}
+          </div>
+        ) : zones.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400 gap-3">
+            <MapPin className="w-12 h-12 text-gray-200" />
+            <p className="font-medium">No geofence zones configured</p>
+            <p className="text-sm text-gray-300">Contact your system administrator to set up zones</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {zones.map((z) => (
+              <ZoneCard key={z.id} zone={z} onView={() => openView(z)} />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Create Modal */}
-      <Dialog open={addOpen} onOpenChange={setAddOpen}>
-        <DialogContent className="sm:max-w-md">
+      {/* View Zone + Check-ins */}
+      <Dialog open={viewOpen} onOpenChange={(o) => !o && setViewOpen(false)}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-[#006B3F]">Create Geofence Zone</DialogTitle>
+            <DialogTitle className="text-[#006B3F] flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              {viewTarget?.name ?? "Zone"} — Details
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            {formFields(form, setForm)}
-            <Button
-              className="w-full bg-[#006B3F] hover:bg-[#005530] text-white"
-              disabled={
-                createMutation.isPending ||
-                !form.name ||
-                !form.centerLat ||
-                !form.centerLng ||
-                !form.radiusMeters
-              }
-              onClick={submitCreate}
-            >
-              {createMutation.isPending ? "Creating..." : "Create Zone"}
-            </Button>
-          </div>
+          {viewTarget && (
+            <div className="space-y-4 pt-2">
+              <div className="grid grid-cols-3 gap-3 text-sm">
+                <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-400">Radius</p><p className="font-semibold">{viewTarget.radiusMeters}m</p></div>
+                <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-400">Total Check-ins</p><p className="font-semibold">{viewTarget.totalCheckIns ?? checkIns.length}</p></div>
+                <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-400">Status</p>
+                  <Badge variant="outline" className={viewTarget.active ? "bg-green-50 text-green-700 border-green-200 text-xs mt-0.5" : "bg-gray-100 text-gray-500 text-xs mt-0.5"}>
+                    {viewTarget.active ? "Active" : "Inactive"}
+                  </Badge>
+                </div>
+              </div>
+              <div className="h-64 rounded-lg overflow-hidden border border-gray-200">
+                {loadingCheckIns ? (
+                  <div className="h-full flex items-center justify-center bg-gray-50">
+                    <Loader2 className="w-6 h-6 text-[#006B3F] animate-spin" />
+                  </div>
+                ) : (
+                  <GeofenceMap lat={viewTarget.centerLat} lng={viewTarget.centerLng} radius={viewTarget.radiusMeters}
+                    checkIns={checkIns} otherZones={[]} readOnly />
+                )}
+              </div>
+              {checkIns.length > 0 && (
+                <div className="max-h-48 overflow-y-auto space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Recent Check-ins</p>
+                  {checkIns.slice(0, 20).map((ci) => (
+                    <div key={ci.id} className="flex items-center justify-between text-sm py-1.5 px-2 rounded hover:bg-gray-50">
+                      <span className="font-medium">{ci.employee?.name ?? "—"}</span>
+                      <span className="text-xs text-gray-400">{format(parseISO(ci.checkInTime), "dd MMM, h:mm a")}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
-
-      {/* Edit Modal */}
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-[#006B3F]">Edit Geofence Zone</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 pt-2">
-            {formFields(editForm, setEditForm)}
-            <Button
-              className="w-full bg-[#006B3F] hover:bg-[#005530] text-white"
-              disabled={updateMutation.isPending || !editForm.name}
-              onClick={submitEdit}
-            >
-              {updateMutation.isPending ? "Saving..." : "Save Changes"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Delete Confirm */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Geofence Zone?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete <strong>{deleteTarget?.name}</strong>.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-red-600 hover:bg-red-700 text-white"
-              onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </DashboardLayout>
   );
 }

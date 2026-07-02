@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:camera/camera.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -6,12 +8,16 @@ import '../models/attendance_record.dart';
 import '../models/leave_balance.dart';
 import '../providers/auth_provider.dart';
 import '../providers/attendance_provider.dart';
+import '../services/api_service.dart';
 import 'check_in_screen.dart';
 import 'attendance_history_screen.dart';
 import 'login_screen.dart';
 import 'requests_screen.dart';
 import 'announcements_screen.dart';
 import 'my_info_screen.dart';
+import 'notifications_screen.dart';
+import 'leave_approvals_screen.dart';
+import '../providers/leave_approvals_provider.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,7 +32,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   static const _bg = Color(0xFFF5F5F5);
 
   int _tabIndex = 0;
+  int _unreadNotifs = 0;
   late final Timer _clockTimer;
+  late final Timer _notifTimer;
   DateTime _now = DateTime.now();
 
   // Controllers
@@ -65,12 +73,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<AttendanceProvider>().fetchDashboard();
+      _fetchUnreadCount();
+      context.read<LeaveApprovalsProvider>().fetchAll();
     });
+    _notifTimer = Timer.periodic(const Duration(seconds: 60), (_) => _fetchUnreadCount());
+  }
+
+  Future<void> _fetchUnreadCount() async {
+    try {
+      final count = await context.read<ApiService>().getUnreadNotificationCount();
+      if (mounted) setState(() => _unreadNotifs = count);
+    } catch (_) {}
   }
 
   @override
   void dispose() {
     _clockTimer.cancel();
+    _notifTimer.cancel();
     _glowCtrl.dispose();
     _contentCtrl.dispose();
     for (final c in _leaveCtrl) {
@@ -129,8 +148,37 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   Future<void> _handleCheckOut() async {
+    // Capture a selfie for checkout
+    String? photoPath;
     try {
-      await context.read<AttendanceProvider>().checkOut();
+      final cameras = await availableCameras();
+      if (cameras.isNotEmpty) {
+        final front = cameras.firstWhere(
+          (c) => c.lensDirection == CameraLensDirection.front,
+          orElse: () => cameras.first,
+        );
+        final ctrl = CameraController(front, ResolutionPreset.medium, enableAudio: false);
+        await ctrl.initialize();
+        if (!mounted) { await ctrl.dispose(); return; }
+        final xfile = await showDialog<XFile>(
+          context: context,
+          barrierDismissible: false,
+          builder: (_) => _CheckOutCameraDialog(controller: ctrl),
+        );
+        await ctrl.dispose();
+        photoPath = xfile?.path;
+      } else {
+        final picker = ImagePicker();
+        final img = await picker.pickImage(source: ImageSource.camera, imageQuality: 85);
+        photoPath = img?.path;
+      }
+    } catch (_) {
+      // Camera unavailable — proceed without photo
+    }
+
+    if (!mounted) return;
+    try {
+      await context.read<AttendanceProvider>().checkOut(photoPath: photoPath);
       if (!mounted) return;
       final now = DateTime.now();
       final h = now.hour > 12 ? now.hour - 12 : now.hour == 0 ? 12 : now.hour;
@@ -170,6 +218,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
     final attendance = context.watch<AttendanceProvider>();
+    final approvals = context.watch<LeaveApprovalsProvider>();
 
     return Scaffold(
       backgroundColor: _bg,
@@ -180,15 +229,16 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const RequestsScreen(),
           const AnnouncementsScreen(),
           const MyInfoScreen(),
+          const LeaveApprovalsScreen(),
         ],
       ),
-      bottomNavigationBar: _bottomNav(),
+      bottomNavigationBar: _bottomNav(approvals.pending.length),
     );
   }
 
   // ─── Bottom Nav ─────────────────────────────────────────────────────────────
 
-  Widget _bottomNav() {
+  Widget _bottomNav(int pendingApprovals) {
     return NavigationBar(
       selectedIndex: _tabIndex,
       onDestinationSelected: (i) => setState(() => _tabIndex = i),
@@ -197,26 +247,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
       animationDuration: const Duration(milliseconds: 300),
       height: 64,
-      destinations: const [
-        NavigationDestination(
+      destinations: [
+        const NavigationDestination(
           icon: Icon(Icons.home_outlined),
           selectedIcon: Icon(Icons.home_rounded, color: _green),
           label: 'Home',
         ),
-        NavigationDestination(
+        const NavigationDestination(
           icon: Icon(Icons.request_page_outlined),
           selectedIcon: Icon(Icons.request_page_rounded, color: _green),
           label: 'Requests',
         ),
-        NavigationDestination(
+        const NavigationDestination(
           icon: Icon(Icons.campaign_outlined),
           selectedIcon: Icon(Icons.campaign_rounded, color: _green),
-          label: 'Announcements',
+          label: 'Updates',
         ),
-        NavigationDestination(
+        const NavigationDestination(
           icon: Icon(Icons.person_outline),
           selectedIcon: Icon(Icons.person_rounded, color: _green),
           label: 'My Info',
+        ),
+        NavigationDestination(
+          icon: pendingApprovals > 0
+              ? Badge.count(
+                  count: pendingApprovals,
+                  child: const Icon(Icons.how_to_reg_outlined),
+                )
+              : const Icon(Icons.how_to_reg_outlined),
+          selectedIcon: pendingApprovals > 0
+              ? Badge.count(
+                  count: pendingApprovals,
+                  child: const Icon(Icons.how_to_reg_rounded, color: _green),
+                )
+              : const Icon(Icons.how_to_reg_rounded, color: _green),
+          label: 'Approvals',
         ),
       ],
     );
@@ -266,6 +331,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                       _actionButton(attendance),
                       const SizedBox(height: 28),
                       _leaveSection(attendance),
+                      const SizedBox(height: 16),
+                      _announcementsCard(),
                       const SizedBox(height: 28),
                       _attendanceSection(attendance),
                     ],
@@ -325,11 +392,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const SizedBox(width: 12),
           Column(
             children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_outlined,
-                    color: Colors.white, size: 24),
-                onPressed: () {},
-                tooltip: 'Notifications',
+              Stack(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_outlined, color: Colors.white, size: 24),
+                    onPressed: () async {
+                      await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotificationsScreen()));
+                      _fetchUnreadCount();
+                    },
+                    tooltip: 'Notifications',
+                  ),
+                  if (_unreadNotifs > 0)
+                    Positioned(
+                      right: 6, top: 6,
+                      child: Container(
+                        width: 16, height: 16,
+                        decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                        child: Center(child: Text('$_unreadNotifs', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.bold))),
+                      ),
+                    ),
+                ],
               ),
               GestureDetector(
                 onTap: _logout,
@@ -448,9 +530,45 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 letterSpacing: 2.5,
               ),
             ),
+
+            // Recorded check-in / check-out times
+            Builder(builder: (ctx) {
+              final today = DateTime.now();
+              AttendanceRecord? todayRecord;
+              for (final r in attendance.records) {
+                final d = r.date.toLocal();
+                if (d.year == today.year && d.month == today.month && d.day == today.day) {
+                  todayRecord = r;
+                  break;
+                }
+              }
+              if (todayRecord == null) return const SizedBox.shrink();
+              return Padding(
+                padding: const EdgeInsets.only(top: 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _miniTimeChip(Icons.login_rounded, 'In', _shortTime(todayRecord.checkInTime), _green),
+                    const SizedBox(width: 24),
+                    _miniTimeChip(Icons.logout_rounded, 'Out', _shortTime(todayRecord.checkOutTime), const Color(0xFFC62828)),
+                  ],
+                ),
+              );
+            }),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _miniTimeChip(IconData icon, String label, String time, Color color) {
+    return Column(
+      children: [
+        Icon(icon, size: 14, color: color.withValues(alpha: 0.7)),
+        const SizedBox(height: 2),
+        Text(label, style: GoogleFonts.roboto(fontSize: 10, color: Colors.grey.shade500)),
+        Text(time, style: GoogleFonts.roboto(fontSize: 13, fontWeight: FontWeight.w600, color: color)),
+      ],
     );
   }
 
@@ -650,6 +768,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ─── Announcements Card ──────────────────────────────────────────────────────
+
+  Widget _announcementsCard() {
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AnnouncementsScreen())),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(colors: [Color(0xFF003D2E), Color(0xFF006B3F)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [BoxShadow(color: const Color(0xFF006B3F).withValues(alpha: 0.3), blurRadius: 8, offset: const Offset(0, 4))],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(12)),
+              child: const Icon(Icons.campaign_rounded, color: Colors.white, size: 24),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Latest Announcements', style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                  Text('Tap to view all updates', style: GoogleFonts.roboto(color: Colors.white.withValues(alpha: 0.75), fontSize: 12)),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white, size: 16),
+          ],
+        ),
       ),
     );
   }
@@ -905,6 +1059,109 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+}
+
+// ─── Checkout camera dialog ──────────────────────────────────────────────────
+
+class _CheckOutCameraDialog extends StatefulWidget {
+  final CameraController controller;
+  const _CheckOutCameraDialog({required this.controller});
+
+  @override
+  State<_CheckOutCameraDialog> createState() => _CheckOutCameraDialogState();
+}
+
+class _CheckOutCameraDialogState extends State<_CheckOutCameraDialog> {
+  static const _primary = Color(0xFF006B3F);
+
+  Future<void> _capture() async {
+    try {
+      final xfile = await widget.controller.takePicture();
+      if (mounted) Navigator.of(context).pop(xfile);
+    } catch (_) {
+      if (mounted) Navigator.of(context).pop(null);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          CameraPreview(widget.controller),
+          Positioned(
+            top: 0, left: 0, right: 0,
+            child: SafeArea(
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.5),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.of(context).pop(null),
+                    ),
+                    Expanded(
+                      child: Text(
+                        'Check-Out Selfie',
+                        style: GoogleFonts.poppins(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Face guide oval
+          Center(
+            child: Container(
+              width: 200,
+              height: 240,
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2),
+                borderRadius: BorderRadius.circular(120),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0, left: 0, right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 40),
+                child: Column(
+                  children: [
+                    GestureDetector(
+                      onTap: _capture,
+                      child: Container(
+                        width: 76, height: 76,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.white, width: 4),
+                          color: Colors.white.withValues(alpha: 0.2),
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 58, height: 58,
+                            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text('Capture Selfie', style: GoogleFonts.roboto(color: Colors.white70, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─── Pulsing glow rings for status circle ────────────────────────────────────

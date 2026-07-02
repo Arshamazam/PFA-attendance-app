@@ -1,4 +1,8 @@
-import { Controller, Post, Get, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
 import { AttendanceService } from './attendance.service';
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckOutDto } from './dto/check-out.dto';
@@ -11,6 +15,26 @@ import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
+
+  @Post('upload-photo')
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: diskStorage({
+        destination: (_req, _file, cb) => {
+          const uploadPath = join(process.cwd(), 'uploads', 'attendance');
+          if (!existsSync(uploadPath)) mkdirSync(uploadPath, { recursive: true });
+          cb(null, uploadPath);
+        },
+        filename: (_req, file, cb) => {
+          cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${extname(file.originalname)}`);
+        },
+      }),
+      limits: { fileSize: 10 * 1024 * 1024 },
+    }),
+  )
+  uploadPhoto(@UploadedFile() file: Express.Multer.File) {
+    return { url: `/uploads/attendance/${file.filename}` };
+  }
 
   @Post('check-in')
   checkIn(@Body() dto: CheckInDto, @CurrentUser() user: { id: string }) {
@@ -51,6 +75,18 @@ export class AttendanceController {
       startDate,
       endDate,
     );
+  }
+
+  @Get('statistics')
+  @Roles('admin', 'manager')
+  getStatistics(@Query('date') date?: string) {
+    return this.attendanceService.getStatistics(date);
+  }
+
+  @Get('trend')
+  @Roles('admin', 'manager')
+  getTrend(@Query('days') days?: string) {
+    return this.attendanceService.getTrend(days ? parseInt(days, 10) : 30);
   }
 
   @Get('employee/:id')

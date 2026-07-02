@@ -17,6 +17,8 @@ class AttendanceProvider extends ChangeNotifier {
 
   AttendanceProvider(this._api);
 
+  ApiService get api => _api;
+
   bool get isCheckedIn => _isCheckedIn;
   String? get todayRecordId => _todayRecordId;
   List<AttendanceRecord> get records => List.unmodifiable(_records);
@@ -36,26 +38,17 @@ class AttendanceProvider extends ChangeNotifier {
       _records = fetched;
       _hasMore = fetched.length >= 20;
 
-      // Derive today's check-in status from records
-      final today = DateTime.now();
-      AttendanceRecord? todayRecord;
+      // Derive check-in status: find the most recent open check-in (no checkout yet).
+      // Records are sorted desc by checkInTime so the first open one is the latest.
+      AttendanceRecord? openRecord;
       for (final r in _records) {
-        if (r.date.year == today.year &&
-            r.date.month == today.month &&
-            r.date.day == today.day) {
-          todayRecord = r;
+        if (r.checkInTime != null && r.checkOutTime == null) {
+          openRecord = r;
           break;
         }
       }
-
-      if (todayRecord != null) {
-        _isCheckedIn =
-            todayRecord.checkInTime != null && todayRecord.checkOutTime == null;
-        _todayRecordId = _isCheckedIn ? todayRecord.id : null;
-      } else {
-        _isCheckedIn = false;
-        _todayRecordId = null;
-      }
+      _isCheckedIn = openRecord != null;
+      _todayRecordId = openRecord?.id;
 
       // Try leave summary — non-critical
       try {
@@ -91,7 +84,8 @@ class AttendanceProvider extends ChangeNotifier {
   Future<void> checkIn({
     required double latitude,
     required double longitude,
-    required String geofenceZoneId,
+    double? gpsAccuracy,
+    String? geofenceZoneId,
     String? lateReason,
     String? lateReasonNotes,
     String? photoPath,
@@ -99,6 +93,7 @@ class AttendanceProvider extends ChangeNotifier {
     final result = await _api.checkIn(
       latitude: latitude,
       longitude: longitude,
+      gpsAccuracy: gpsAccuracy,
       geofenceZoneId: geofenceZoneId,
       lateReason: lateReason,
       lateReasonNotes: lateReasonNotes,
@@ -110,11 +105,11 @@ class AttendanceProvider extends ChangeNotifier {
     await fetchDashboard();
   }
 
-  Future<void> checkOut() async {
+  Future<void> checkOut({String? photoPath}) async {
     if (_todayRecordId == null) {
       throw const ApiException('No active check-in found. Please refresh.');
     }
-    await _api.checkOut(attendanceId: _todayRecordId!);
+    await _api.checkOut(attendanceId: _todayRecordId!, photoPath: photoPath);
     _isCheckedIn = false;
     _todayRecordId = null;
     notifyListeners();

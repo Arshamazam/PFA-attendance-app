@@ -57,12 +57,8 @@ class AuthProvider extends ChangeNotifier {
       _token = token;
       _api.setToken(token);
 
-      final userData = (data['user'] ?? data['employee']) as Map<String, dynamic>?;
-      if (userData != null) {
-        _user = User.fromJson(userData);
-      } else {
-        _user = await _api.getProfile();
-      }
+      // Always fetch full profile so we get profilePhotoUrl and geofenceZoneIds
+      _user = await _api.getProfile();
 
       await _storage.write(key: _tokenKey, value: token);
       await _storage.write(key: _userKey, value: jsonEncode({
@@ -72,6 +68,9 @@ class AuthProvider extends ChangeNotifier {
         'role': _user!.role,
         'employeeId': _user!.employeeId,
         'designation': _user!.designation,
+        'profilePhotoUrl': _user!.profilePhotoUrl,
+        'geofenceZoneIds': _user!.geofenceZoneIds,
+        'employeeCode': _user!.employeeId,
       }));
 
       _isLoading = false;

@@ -1,8 +1,11 @@
+import 'dart:io';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import '../models/user.dart';
 import '../models/attendance_record.dart';
 import '../models/geofence_zone.dart';
 import '../models/leave_balance.dart';
+import '../models/dropdown_option.dart';
 
 class ApiException implements Exception {
   final String message;
@@ -17,7 +20,18 @@ class UnauthorizedException extends ApiException {
 }
 
 class ApiService {
-  static const _baseUrl = 'http://127.0.0.1:3000';
+  static String _baseUrl = 'http://192.168.100.98:3000';
+  static String get baseUrl => _baseUrl;
+
+  // Call once in main() before runApp — detects iOS Simulator vs real device
+  static Future<void> initialize() async {
+    if (Platform.isIOS) {
+      final info = await DeviceInfoPlugin().iosInfo;
+      if (!info.isPhysicalDevice) {
+        _baseUrl = 'http://localhost:3000';
+      }
+    }
+  }
 
   late final Dio _dio;
 
@@ -50,11 +64,14 @@ class ApiService {
       final response = await call();
       return _handleResponse(response, parser);
     } on DioException catch (e) {
-      if (e.response?.statusCode == 401) throw const UnauthorizedException();
+      final status = e.response?.statusCode;
+      // 401 always means the token is expired/invalid (login failures are now 400)
+      if (status == 401) throw const UnauthorizedException();
+      // For all other errors, show the actual message from the response body
       final msg = (e.response?.data is Map)
           ? (e.response!.data as Map)['message']?.toString() ?? e.message ?? 'Request failed'
           : e.message ?? 'Cannot connect to server';
-      throw ApiException(msg, statusCode: e.response?.statusCode);
+      throw ApiException(msg, statusCode: status);
     }
   }
 
@@ -67,6 +84,18 @@ class ApiService {
         () => _dio.get('/auth/me'),
         (data) => User.fromJson(data as Map<String, dynamic>),
       );
+
+  Future<String?> uploadAttendancePhoto(String filePath) async {
+    try {
+      final formData = FormData.fromMap({
+        'photo': await MultipartFile.fromFile(filePath, filename: File(filePath).uri.pathSegments.last),
+      });
+      final response = await _dio.post('/attendance/upload-photo', data: formData);
+      return (response.data as Map<String, dynamic>?)?['url'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<List<GeofenceZone>> fetchGeofences() => _request(
         () => _dio.get('/geofence'),
@@ -105,25 +134,74 @@ class ApiService {
         },
       );
 
+  Future<Map<String, dynamic>> getGeofenceStatus(String employeeId) => _request(
+    () => _dio.get('/employees/$employeeId/geofence-status'),
+    (data) => data as Map<String, dynamic>? ?? {'requiresGeofence': true, 'geofenceZoneIds': []},
+  );
+
   Future<Map<String, dynamic>> checkIn({
     required double latitude,
     required double longitude,
-    required String geofenceZoneId,
+    double? gpsAccuracy,
+    String? geofenceZoneId,
     String? lateReason,
     String? lateReasonNotes,
     String? photoPath,
-  }) => _request(
-        () => _dio.post('/attendance/check-in', data: {
-          'lat': latitude,
-          'lng': longitude,
-          'geofenceZoneId': geofenceZoneId,
-        }),
-        (data) => data as Map<String, dynamic>? ?? {},
+  }) async {
+    String? photoUrl;
+    if (photoPath != null) {
+      photoUrl = await uploadAttendancePhoto(photoPath);
+    }
+    return _request(
+      () => _dio.post('/attendance/check-in', data: {
+        'lat': latitude,
+        'lng': longitude,
+        if (gpsAccuracy != null) 'gpsAccuracy': gpsAccuracy,
+        if (geofenceZoneId != null) 'geofenceZoneId': geofenceZoneId,
+        if (photoUrl != null) 'photoUrl': photoUrl,
+        if (lateReason != null) 'lateReason': lateReason,
+        if (lateReasonNotes != null && lateReasonNotes.isNotEmpty) 'lateReasonNotes': lateReasonNotes,
+      }),
+      (data) => data as Map<String, dynamic>? ?? {},
+    );
+  }
+
+  Future<Map<String, dynamic>> checkOut({required String attendanceId, String? photoPath}) async {
+    String? photoUrl;
+    if (photoPath != null) {
+      photoUrl = await uploadAttendancePhoto(photoPath);
+    }
+    return _request(
+      () => _dio.post('/attendance/check-out', data: {
+        'attendanceId': attendanceId,
+        if (photoUrl != null) 'checkOutPhotoUrl': photoUrl,
+      }),
+      (data) => data as Map<String, dynamic>? ?? {},
+    );
+  }
+
+  Future<Map<String, dynamic>> getPendingApprovals({int page = 1, int limit = 50}) => _request(
+        () => _dio.get('/leave/pending-approvals', queryParameters: {'page': page, 'limit': limit}),
+        (data) => data as Map<String, dynamic>? ?? {'data': [], 'total': 0},
       );
 
-  Future<Map<String, dynamic>> checkOut({required String attendanceId}) => _request(
-        () => _dio.post('/attendance/check-out', data: {'attendanceId': attendanceId}),
-        (data) => data as Map<String, dynamic>? ?? {},
+  Future<Map<String, dynamic>> getMyApprovals({String? status, int page = 1, int limit = 50}) => _request(
+        () => _dio.get('/leave/my-approvals', queryParameters: {
+          'page': page,
+          'limit': limit,
+          if (status != null && status != 'all') 'status': status,
+        }),
+        (data) => data as Map<String, dynamic>? ?? {'data': [], 'total': 0},
+      );
+
+  Future<void> approveLeave(String leaveId) => _request(
+        () => _dio.patch('/leave/$leaveId/approve'),
+        (_) {},
+      );
+
+  Future<void> rejectLeave(String leaveId, String reason) => _request(
+        () => _dio.patch('/leave/$leaveId/reject', data: {'rejectionReason': reason}),
+        (_) {},
       );
 
   Future<Map<String, dynamic>> getLeaveRequests({int page = 1, int limit = 10}) => _request(
@@ -152,5 +230,59 @@ class ApiService {
   ) => _request(
         () => _dio.patch('/employees/$id', data: fields),
         (data) => data as Map<String, dynamic>? ?? {},
+      );
+
+  /// Fetches only the notifications addressed to the logged-in employee.
+  Future<Map<String, dynamic>> getNotifications({int limit = 20}) => _request(
+        () => _dio.get('/notifications/my', queryParameters: {'limit': limit}),
+        (data) => data as Map<String, dynamic>? ?? {'data': [], 'total': 0},
+      );
+
+  /// Unread count scoped to the current employee.
+  Future<int> getUnreadNotificationCount() => _request(
+        () => _dio.get('/notifications/my/unread-count'),
+        (data) => (data as Map<String, dynamic>?)?['count'] as int? ?? 0,
+      );
+
+  Future<void> markNotificationRead(String id) => _request(
+        () => _dio.patch('/notifications/$id/mark-read'),
+        (_) {},
+      );
+
+  /// Mark all of the current employee's notifications as read.
+  Future<void> markAllNotificationsRead() => _request(
+        () => _dio.patch('/notifications/my/mark-all-read'),
+        (_) {},
+      );
+
+  Future<List<Map<String, dynamic>>> getMyPerformanceGoals() => _request(
+        () => _dio.get('/performance-goals/my'),
+        (data) {
+          final list = data is List ? data : (data as Map<String, dynamic>?)?['data'] as List? ?? [];
+          return list.whereType<Map<String, dynamic>>().toList();
+        },
+      );
+
+  Future<Map<String, dynamic>> getActiveAnnouncements({int skip = 0, int take = 10, String? department}) => _request(
+        () => _dio.get('/announcements/active', queryParameters: {
+          'skip': skip,
+          'take': take,
+          if (department != null) 'department': department,
+        }),
+        (data) => data as Map<String, dynamic>? ?? {'data': [], 'total': 0},
+      );
+
+  Future<void> markAnnouncementViewed(String id) => _request(
+        () => _dio.patch('/announcements/$id/view'),
+        (_) {},
+      );
+
+  /// Fetch all active dropdown categories with their values.
+  Future<List<DropdownCategory>> getDropdowns() => _request(
+        () => _dio.get('/dropdown-master'),
+        (data) {
+          final list = data is List ? data : (data as Map<String, dynamic>?)?['data'] as List? ?? [];
+          return list.whereType<Map<String, dynamic>>().map(DropdownCategory.fromJson).toList();
+        },
       );
 }

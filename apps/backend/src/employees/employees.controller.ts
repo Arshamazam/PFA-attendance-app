@@ -23,16 +23,43 @@ export class EmployeesController {
   constructor(private readonly employeesService: EmployeesService) {}
 
   @Get()
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'super_admin')
   findAll(
     @Query('page') page?: string,
     @Query('limit') limit?: string,
     @Query('role') role?: string,
+    @Query('search') search?: string,
+    @Query('department') department?: string,
+    @Query('status') status?: string,
   ) {
     return this.employeesService.findAll(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
       role,
+      search,
+      department,
+      status,
+    );
+  }
+
+  @Get(':id/geofence-status')
+  @Roles('admin', 'manager', 'employee', 'super_admin')
+  getGeofenceStatus(@Param('id') id: string) {
+    return this.employeesService.getGeofenceStatus(id);
+  }
+
+  @Patch(':id/geofence-requirement')
+  @Roles('super_admin')
+  updateGeofenceRequirement(
+    @Param('id') id: string,
+    @Body() body: { requiresGeofence: boolean; reason?: string },
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.employeesService.updateGeofenceRequirement(
+      id,
+      body.requiresGeofence,
+      body.reason,
+      user.id,
     );
   }
 

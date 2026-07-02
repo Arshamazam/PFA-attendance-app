@@ -516,6 +516,35 @@ class _RequestCard extends StatelessWidget {
                   ],
                 ),
               ],
+
+              // Rejection reason
+              if (request.status == 'rejected' && request.rejectionReason != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBEE),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: const Color(0xFFEF9A9A)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.info_outline_rounded, size: 13, color: Color(0xFFC62828)),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          request.rejectionReason!,
+                          style: GoogleFonts.roboto(
+                            fontSize: 11,
+                            color: const Color(0xFFC62828),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ],
           ),
         ),

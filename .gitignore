@@ -6,3 +6,8 @@ dist/
 *.log
 .DS_Store
 coverage/
+apps/backend/uploads/
+apps/admin/public/uploads/
+.next/
+build/
+*.lock.db

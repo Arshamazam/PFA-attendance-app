@@ -2,6 +2,17 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  cookies: {
+    sessionToken: {
+      name: "admin.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax" as const,
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   providers: [
     Credentials({
       credentials: {
@@ -33,7 +44,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             Buffer.from(accessToken.split(".")[1], "base64url").toString()
           );
           const role: string = payload.role || employee.role || "";
-          if (!["admin", "manager"].includes(role)) return null;
+          if (!["admin", "manager", "super_admin"].includes(role)) return null;
 
           return {
             id: employee.id ?? payload.sub,

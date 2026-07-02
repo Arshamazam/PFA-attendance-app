@@ -22,10 +22,10 @@ export default function DashboardLayout({
 
   if (status === "loading") {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#F5F5F5]">
+      <div className="min-h-screen flex items-center justify-center bg-[#EEF2F7]">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 border-3 border-[#006B3F] border-t-transparent rounded-full animate-spin" />
-          <p className="text-sm text-gray-500">Loading...</p>
+          <div className="w-9 h-9 border-[3px] border-[#006B3F] border-t-transparent rounded-full animate-spin" />
+          <p className="text-sm text-gray-400 font-medium">Loading dashboard…</p>
         </div>
       </div>
     );
@@ -34,7 +34,14 @@ export default function DashboardLayout({
   if (status === "unauthenticated") return null;
 
   return (
-    <div className="min-h-screen bg-[#F5F5F5]">
+    <div
+      className="min-h-screen"
+      style={{
+        backgroundColor: "#EEF2F7",
+        backgroundImage: "radial-gradient(circle, #c9d3e0 1px, transparent 1px)",
+        backgroundSize: "28px 28px",
+      }}
+    >
       <Sidebar />
       <div className="ml-60 flex flex-col min-h-screen">
         <Header title={title} />

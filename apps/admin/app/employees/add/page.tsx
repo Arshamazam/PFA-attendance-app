@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { toast } from "sonner";
 import {
   User,
@@ -79,13 +79,13 @@ const step3Schema = z.object({
 });
 
 const step4Schema = z.object({
-  bankAccount: z.string().regex(/^\d{16,24}$/, "16–24 digits"),
-  iban: z.string().regex(/^PK\d{2}[A-Z0-9]{4}\d{16}$/, "Format: PK94XXXX0000000000XXXXXXXX"),
+  bankAccount: z.string().regex(/^\d{16,24}$/, "16–24 digits").optional().or(z.literal("")),
+  iban: z.string().regex(/^PK\d{2}[A-Z0-9]{4}\d{16}$/, "Format: PK94XXXX0000000000XXXXXXXX").optional().or(z.literal("")),
   tfn: z.string().optional(),
   pensionAccount: z.string().optional(),
   officeLocation: z.string().min(2, "Required"),
-  badgeNumber: z.string().min(2, "Required"),
-  geofenceZoneIds: z.array(z.string()).min(1, "Select at least one zone"),
+  badgeNumber: z.string().optional(),
+  geofenceZoneIds: z.array(z.string()).min(1, "Select a geofence zone"),
 });
 
 const step5Schema = z.object({
@@ -97,7 +97,6 @@ const step5Schema = z.object({
     .regex(/[0-9]/, "Must contain number")
     .regex(/[^A-Za-z0-9]/, "Must contain special character"),
   confirmPassword: z.string(),
-  role: z.string().min(1, "Required"),
 }).refine((d) => d.password === d.confirmPassword, {
   message: "Passwords do not match",
   path: ["confirmPassword"],
@@ -124,14 +123,16 @@ const STEPS = [
 ];
 
 const CITIES = ["Lahore", "Islamabad", "Karachi", "Multan", "Faisalabad", "Peshawar", "Quetta", "Rawalpindi", "Sialkot", "Gujranwala"];
-const DEPARTMENTS = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad"];
-const DESIGNATIONS = ["Food Inspector", "Senior Inspector", "Supervisor", "Manager", "Admin", "Other"];
-const CADRES = ["FPSC", "Direct Recruitment", "Contract"];
-const GRADES = ["BPS-12", "BPS-14", "BPS-16", "BPS-17", "BPS-18", "BPS-19", "BPS-20"];
-const SHIFTS = ["Day", "Night", "Rotation"];
-const EMP_STATUSES = ["Active", "On Leave", "Suspended", "Retired"];
 const RELATIONSHIPS = ["Spouse", "Parent", "Sibling", "Child", "Other"];
 const RELIGIONS = ["Islam", "Christianity", "Sikhism", "Hinduism", "Other"];
+
+// Fallback values used while the API loads or if it fails
+const FALLBACK_DEPARTMENTS = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad"];
+const FALLBACK_DESIGNATIONS = ["Food Inspector", "Senior Inspector", "Supervisor", "Manager", "Admin", "Other"];
+const FALLBACK_CADRES = ["FPSC", "Direct Recruitment", "Contract"];
+const FALLBACK_GRADES = ["BPS-12", "BPS-14", "BPS-16", "BPS-17", "BPS-18", "BPS-19", "BPS-20"];
+const FALLBACK_SHIFTS = ["Day", "Night", "Rotation"];
+const FALLBACK_EMP_STATUSES = ["Active", "On Leave", "Suspended", "Retired"];
 
 function passwordStrength(pw: string): { score: number; label: string; color: string } {
   let score = 0;
@@ -164,8 +165,8 @@ function Field({ label, error, children, required }: { label: string; error?: st
 function Sel({ value, onChange, options, placeholder }: { value: string; onChange: (v: string) => void; options: string[]; placeholder?: string }) {
   return (
     <Select value={value || ""} onValueChange={(v) => { if (v) onChange(v); }}>
-      <SelectTrigger className="h-9 text-sm border-gray-200 focus:ring-[#006B3F]">
-        <SelectValue placeholder={placeholder ?? "Select..."} />
+      <SelectTrigger className="h-10 w-full text-sm border-2 border-gray-300 hover:border-gray-400 focus-visible:border-[#006B3F] focus-visible:ring-2 focus-visible:ring-[#006B3F]/20 transition-all">
+        <SelectValue placeholder={placeholder ?? "Select…"} />
       </SelectTrigger>
       <SelectContent>
         {options.map((o) => (
@@ -255,16 +256,42 @@ function FileUpload({ label, required, onUpload, value }: { label: string; requi
 
 export default function AddEmployeePage() {
   const router = useRouter();
+  const photoFileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
-  const [uploads, setUploads] = useState({ cnicCopyUrl: "", degreeCertificateUrl: "", medicalCertificateUrl: "" });
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [uploads, setUploads] = useState({ profilePhotoUrl: "", cnicCopyUrl: "", degreeCertificateUrl: "", medicalCertificateUrl: "" });
+
+  async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 3 * 1024 * 1024) { toast.error("Photo must be under 3 MB"); return; }
+    if (!file.type.startsWith("image/")) { toast.error("Please select an image file"); return; }
+    setPhotoPreview(URL.createObjectURL(file));
+    setUploadingPhoto(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("folder", "avatars");
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Upload failed");
+      setUploads((u) => ({ ...u, profilePhotoUrl: data.url }));
+      toast.success("Photo uploaded");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+      setPhotoPreview(null);
+    } finally {
+      setUploadingPhoto(false);
+    }
+  }
 
   const { register, formState: { errors }, setValue, watch, setError, clearErrors, getValues } = useForm<FormData>({
     mode: "onChange",
     defaultValues: {
-      role: "employee",
       employmentStatus: "Active",
       geofenceZoneIds: [],
     },
@@ -272,6 +299,21 @@ export default function AddEmployeePage() {
 
   const watched = watch();
   const pwStrength = passwordStrength(watched.password || "");
+
+  // Fetch dynamic dropdown options from backend
+  const { data: rawDropdowns } = useQuery({
+    queryKey: ["dropdown-master"],
+    queryFn: () => api.get("/dropdown-master").then((r) => r.data as { fieldType: string; values: { value: string; label: string }[] }[]),
+    staleTime: 5 * 60 * 1000,
+  });
+  const dropdownMap: Record<string, string[]> = {};
+  (rawDropdowns ?? []).forEach((d) => { dropdownMap[d.fieldType] = d.values.map((v) => v.label); });
+  const DEPARTMENTS = dropdownMap["Department"] ?? FALLBACK_DEPARTMENTS;
+  const DESIGNATIONS = dropdownMap["Designation"] ?? FALLBACK_DESIGNATIONS;
+  const CADRES = dropdownMap["ServiceCadre"] ?? FALLBACK_CADRES;
+  const GRADES = dropdownMap["GradeLevel"] ?? FALLBACK_GRADES;
+  const SHIFTS = dropdownMap["ShiftType"] ?? FALLBACK_SHIFTS;
+  const EMP_STATUSES = dropdownMap["EmploymentStatus"] ?? FALLBACK_EMP_STATUSES;
 
   // Fetch geofence zones
   const { data: zonesData } = useQuery({
@@ -305,11 +347,9 @@ export default function AddEmployeePage() {
 
   const handlePrev = () => setStep((s) => s - 1);
 
-  // Toggle geofence zone selection
-  const toggleZone = (id: string) => {
-    const current = watched.geofenceZoneIds ?? [];
-    const next = current.includes(id) ? current.filter((z) => z !== id) : [...current, id];
-    setValue("geofenceZoneIds", next, { shouldValidate: true });
+  // Single geofence zone selection — only one zone allowed at a time
+  const selectZone = (id: string) => {
+    setValue("geofenceZoneIds", [id], { shouldValidate: true });
   };
 
   const onFinalSubmit = async () => {
@@ -319,8 +359,10 @@ export default function AddEmployeePage() {
     try {
       const payload = {
         ...data,
+        role: "employee",
         salary: data.salary ? parseFloat(data.salary) : undefined,
         ...uploads,
+        profilePhotoUrl: uploads.profilePhotoUrl || undefined,
         active: true,
       };
       const res = await api.post("/employees", payload);
@@ -389,7 +431,7 @@ export default function AddEmployeePage() {
             </Field>
           </div>
           <Field label="City" required error={errors.addressCity?.message}>
-            <Sel value={watched.addressCity ?? ""} onChange={(v) => setValue("addressCity", v, { shouldValidate: true })} options={CITIES} />
+            <SearchableSelect value={watched.addressCity ?? ""} onChange={(v) => setValue("addressCity", v, { shouldValidate: true })} options={CITIES} placeholder="Select city" searchPlaceholder="Search city…" error={!!errors.addressCity} />
           </Field>
           <Field label="District" required error={errors.addressDistrict?.message}>
             <Input {...register("addressDistrict")} placeholder="Lahore" className="h-9 border-gray-200" />
@@ -429,33 +471,31 @@ export default function AddEmployeePage() {
             <Input {...register("dateOfJoining")} type="date" max={new Date().toISOString().split("T")[0]} className="h-9 border-gray-200" />
           </Field>
           <Field label="Department" required error={errors.department?.message}>
-            <Sel value={watched.department ?? ""} onChange={(v) => setValue("department", v, { shouldValidate: true })} options={DEPARTMENTS} placeholder="Select department..." />
+            <SearchableSelect value={watched.department ?? ""} onChange={(v) => setValue("department", v, { shouldValidate: true })} options={DEPARTMENTS} placeholder="Select department" searchPlaceholder="Search department…" error={!!errors.department} />
           </Field>
           <Field label="Designation / Position" required error={errors.designation?.message}>
-            <Sel value={watched.designation ?? ""} onChange={(v) => setValue("designation", v, { shouldValidate: true })} options={DESIGNATIONS} />
+            <SearchableSelect value={watched.designation ?? ""} onChange={(v) => setValue("designation", v, { shouldValidate: true })} options={DESIGNATIONS} placeholder="Select designation" searchPlaceholder="Search designation…" error={!!errors.designation} />
           </Field>
           <Field label="Service Cadre" required error={errors.serviceCadre?.message}>
             <Sel value={watched.serviceCadre ?? ""} onChange={(v) => setValue("serviceCadre", v, { shouldValidate: true })} options={CADRES} />
           </Field>
           <Field label="Grade / Level" required error={errors.grade?.message}>
-            <Sel value={watched.grade ?? ""} onChange={(v) => setValue("grade", v, { shouldValidate: true })} options={GRADES} />
+            <SearchableSelect value={watched.grade ?? ""} onChange={(v) => setValue("grade", v, { shouldValidate: true })} options={GRADES} placeholder="Select grade" searchPlaceholder="Search grade…" error={!!errors.grade} />
           </Field>
           <Field label="Basic Salary (PKR)" error={errors.salary?.message}>
             <Input {...register("salary")} type="number" placeholder="50000" className="h-9 border-gray-200" />
           </Field>
           <Field label="Reporting Officer" required error={errors.reportingOfficerId?.message}>
-            <Select value={watched.reportingOfficerId ?? ""} onValueChange={(v) => { if (v) setValue("reportingOfficerId", v, { shouldValidate: true }); }}>
-              <SelectTrigger className="h-9 text-sm border-gray-200">
-                <SelectValue placeholder="Select manager..." />
-              </SelectTrigger>
-              <SelectContent>
-                {managers.map((m: { id: string; name: string; role: string }) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name} <span className="text-gray-400 text-xs">({m.role})</span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchableSelect
+              value={watched.reportingOfficerId ?? ""}
+              onChange={(v) => setValue("reportingOfficerId", v, { shouldValidate: true })}
+              options={managers.length
+                ? managers.map((m: { id: string; name: string; role: string }) => ({ value: m.id, label: m.name, sub: m.role }))
+                : []}
+              placeholder="Search & select manager…"
+              searchPlaceholder="Search by name…"
+              error={!!errors.reportingOfficerId}
+            />
           </Field>
           <Field label="Shift Type" required error={errors.shiftType?.message}>
             <Sel value={watched.shiftType ?? ""} onChange={(v) => setValue("shiftType", v, { shouldValidate: true })} options={SHIFTS} />
@@ -473,10 +513,10 @@ export default function AddEmployeePage() {
       <div>
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Financial Details</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <Field label="Bank Account Number" required error={errors.bankAccount?.message}>
+          <Field label="Bank Account Number" error={errors.bankAccount?.message}>
             <Input {...register("bankAccount")} placeholder="1234567890123456" className="h-9 border-gray-200 font-mono" />
           </Field>
-          <Field label="IBAN" required error={errors.iban?.message}>
+          <Field label="IBAN" error={errors.iban?.message}>
             <Input {...register("iban")} placeholder="PK94ABCD0000000000000000" className="h-9 border-gray-200 font-mono uppercase" />
           </Field>
           <Field label="Tax File Number (TFN)" error={errors.tfn?.message}>
@@ -494,27 +534,26 @@ export default function AddEmployeePage() {
           <Field label="Office Location / Building" required error={errors.officeLocation?.message}>
             <Input {...register("officeLocation")} placeholder="PFA Head Office, Lahore" className="h-9 border-gray-200" />
           </Field>
-          <Field label="Badge / ID Card Number" required error={errors.badgeNumber?.message}>
+          <Field label="Badge / ID Card Number" error={errors.badgeNumber?.message}>
             <Input {...register("badgeNumber")} placeholder="PFA-2026-001" className="h-9 border-gray-200 font-mono" />
           </Field>
         </div>
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Geofence Zone Assignment</h3>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Geofence Zone Assignment</h3>
+        <p className="text-xs text-gray-400 mb-3">Select one zone — the employee can only check in from this location</p>
         {(errors.geofenceZoneIds as { message?: string } | undefined)?.message && (
           <p className="text-xs text-red-500 mb-2">{(errors.geofenceZoneIds as { message?: string }).message}</p>
         )}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-3">
+        <div className="flex flex-col gap-2 max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-3">
           {(zones as { id: string; name: string; centerLat: number; centerLng: number; radiusMeters: number }[]).map((z) => {
-            const checked = (watched.geofenceZoneIds ?? []).includes(z.id);
+            const selected = (watched.geofenceZoneIds ?? [])[0] === z.id;
             return (
-              <label key={z.id} className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${checked ? "border-[#006B3F] bg-green-50" : "border-gray-200 hover:border-gray-300"}`}>
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={() => toggleZone(z.id)}
-                  className="mt-0.5 data-[state=checked]:bg-[#006B3F] data-[state=checked]:border-[#006B3F]"
-                />
+              <label key={z.id} onClick={() => selectZone(z.id)} className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${selected ? "border-[#006B3F] bg-green-50" : "border-gray-200 hover:border-gray-300"}`}>
+                <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center transition-colors ${selected ? "border-[#006B3F]" : "border-gray-300"}`}>
+                  {selected && <span className="w-2 h-2 rounded-full bg-[#006B3F]" />}
+                </span>
                 <div>
                   <p className="text-sm font-medium">{z.name}</p>
                   <p className="text-xs text-gray-400 font-mono">{z.centerLat.toFixed(4)}, {z.centerLng.toFixed(4)} · {z.radiusMeters}m</p>
@@ -523,15 +562,75 @@ export default function AddEmployeePage() {
             );
           })}
           {(zones as unknown[]).length === 0 && (
-            <p className="text-sm text-gray-400 col-span-2 text-center py-4">No geofence zones found</p>
+            <p className="text-sm text-gray-400 text-center py-4">No geofence zones found. Ask Super Admin to create zones first.</p>
           )}
         </div>
+        {((watched.geofenceZoneIds ?? []).length > 0) && (
+          <p className="text-xs text-[#006B3F] font-medium mt-2">
+            ✓ Assigned to: {(zones as { id: string; name: string }[]).find((z) => z.id === watched.geofenceZoneIds?.[0])?.name}
+          </p>
+        )}
       </div>
     </div>
   );
 
   const renderStep5 = () => (
     <div className="space-y-8">
+      {/* Profile Photo */}
+      <div>
+        <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Profile Photo</h3>
+        <div className="flex items-center gap-6">
+          <div className="relative shrink-0">
+            <div className="w-24 h-24 rounded-2xl overflow-hidden border-2 border-gray-200 bg-gray-50 flex items-center justify-center">
+              {photoPreview ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={photoPreview} alt="Profile" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-3xl font-black text-gray-200">
+                  {(watched.name ?? "?").slice(0, 2).toUpperCase()}
+                </span>
+              )}
+            </div>
+            {uploadingPhoto && (
+              <div className="absolute inset-0 bg-white/70 rounded-2xl flex items-center justify-center">
+                <div className="w-5 h-5 border-2 border-[#006B3F] border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          <div className="space-y-2">
+            <p className="text-sm text-gray-600">
+              This photo will appear on the employee&apos;s mobile app profile.
+            </p>
+            <p className="text-xs text-gray-400">JPG or PNG · Max 3 MB</p>
+            <input
+              ref={photoFileRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={handlePhotoChange}
+            />
+            <button
+              type="button"
+              onClick={() => photoFileRef.current?.click()}
+              disabled={uploadingPhoto}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-[#006B3F] text-[#006B3F] text-sm font-medium hover:bg-green-50 disabled:opacity-50 transition-colors"
+            >
+              <Upload className="w-4 h-4" />
+              {uploadingPhoto ? "Uploading…" : photoPreview ? "Change Photo" : "Upload Photo"}
+            </button>
+            {photoPreview && !uploadingPhoto && (
+              <button
+                type="button"
+                onClick={() => { setPhotoPreview(null); setUploads((u) => ({ ...u, profilePhotoUrl: "" })); if (photoFileRef.current) photoFileRef.current.value = ""; }}
+                className="ml-2 text-xs text-red-400 hover:text-red-600"
+              >
+                Remove
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div>
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Document Uploads</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -573,18 +672,6 @@ export default function AddEmployeePage() {
                 {showConfirmPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
-          </Field>
-          <Field label="System Role" required error={errors.role?.message}>
-            <Select value={watched.role ?? "employee"} onValueChange={(v) => { if (v) setValue("role", v, { shouldValidate: true }); }}>
-              <SelectTrigger className="h-9 text-sm border-gray-200">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {[["employee", "Employee — Can view own data"], ["manager", "Manager — Can approve leaves, view team"], ["admin", "Admin — Full access"]].map(([v, l]) => (
-                  <SelectItem key={v} value={v}>{l}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </Field>
         </div>
       </div>

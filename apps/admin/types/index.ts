@@ -3,6 +3,12 @@ export interface Employee {
   name: string;
   email: string;
   role: "admin" | "manager" | "employee";
+  employeeCode?: string;
+  designation?: string;
+  department?: string;
+  mobilePhone?: string;
+  profilePhotoUrl?: string | null;
+  active?: boolean;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string | null;
@@ -28,6 +34,7 @@ export interface AttendanceRecord {
   checkInLat: number;
   checkInLng: number;
   checkInPhotoUrl: string | null;
+  checkOutPhotoUrl: string | null;
   geofenceZoneId: string;
   geofenceZone?: { id: string; name: string };
   status: string;

@@ -63,6 +63,24 @@ export class AuthService {
     return { token, employee: { id: employee.id, email: employee.email, name: employee.name } };
   }
 
+  async getProfile(id: string) {
+    return this.prisma.employee.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        designation: true,
+        department: true,
+        employeeCode: true,
+        profilePhotoUrl: true,
+        geofenceZoneIds: true,
+        active: true,
+      },
+    });
+  }
+
   async validateToken(payload: any) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: payload.sub },

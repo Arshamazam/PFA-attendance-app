@@ -1,11 +1,19 @@
-import { Controller, Post, Body, HttpException, HttpStatus, Logger, ConflictException } from '@nestjs/common';
+import { Controller, Post, Get, Body, HttpException, HttpStatus, Logger, ConflictException, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
+import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
+import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 
 @Controller('auth')
 export class AuthController {
   private logger = new Logger('AuthController');
 
   constructor(private authService: AuthService) {}
+
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  getMe(@CurrentUser() user: { id: string }) {
+    return this.authService.getProfile(user.id);
+  }
 
   @Post('signup')
   async signup(@Body() body: { email: string; password: string; name: string }) {
@@ -27,8 +35,12 @@ export class AuthController {
       const result = await this.authService.login(body.email, body.password);
       return result;
     } catch (error) {
+      // Re-throw JWT/auth errors as 401; bad credentials as 400
+      if (error instanceof UnauthorizedException) {
+        throw new HttpException('Invalid email or password', HttpStatus.BAD_REQUEST);
+      }
       this.logger.error('Login error:', error);
-      throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
+      throw new HttpException('Invalid email or password', HttpStatus.BAD_REQUEST);
     }
   }
 }

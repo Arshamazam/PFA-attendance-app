@@ -29,8 +29,41 @@ export class LeaveController {
     );
   }
 
+  /** Pending requests assigned to the calling officer's queue */
+  @Get('pending-approvals')
+  @Roles('admin', 'manager', 'employee', 'super_admin')
+  getPendingApprovals(
+    @CurrentUser() user: { id: string },
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.leaveService.getPendingApprovals(
+      user.id,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
+  /** Approval history (approved + rejected) by the calling officer */
+  @Get('my-approvals')
+  @Roles('admin', 'manager', 'employee', 'super_admin')
+  getMyApprovals(
+    @CurrentUser() user: { id: string },
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.leaveService.getMyApprovals(
+      user.id,
+      status,
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 50,
+    );
+  }
+
+  /** All pending — for admin panel */
   @Get('pending')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'super_admin')
   getPendingRequests(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.leaveService.getPendingRequests(
       page ? parseInt(page, 10) : 1,
@@ -39,14 +72,18 @@ export class LeaveController {
   }
 
   @Patch(':id/approve')
-  @Roles('admin', 'manager')
+  @Roles('admin', 'manager', 'employee', 'super_admin')
   approve(@Param('id') id: string, @CurrentUser() user: { id: string }) {
     return this.leaveService.approve(id, user.id);
   }
 
   @Patch(':id/reject')
-  @Roles('admin', 'manager')
-  reject(@Param('id') id: string, @CurrentUser() user: { id: string }) {
-    return this.leaveService.reject(id, user.id);
+  @Roles('admin', 'manager', 'employee', 'super_admin')
+  reject(
+    @Param('id') id: string,
+    @CurrentUser() user: { id: string },
+    @Body() body: { rejectionReason?: string },
+  ) {
+    return this.leaveService.reject(id, user.id, body.rejectionReason);
   }
 }
