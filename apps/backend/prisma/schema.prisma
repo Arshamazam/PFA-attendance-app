@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -48,7 +48,7 @@ model Employee {
   pensionAccount        String?
   officeLocation        String?
   badgeNumber           String?        @unique
-  geofenceZoneIds       String[]       @default([])
+  geofenceZoneIds       Json           @default("[]")
   // Documents & Media
   profilePhotoUrl       String?
   cnicCopyUrl           String?

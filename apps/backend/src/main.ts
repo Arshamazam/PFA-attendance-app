@@ -13,7 +13,8 @@ async function bootstrap() {
   if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
   app.use('/uploads', express.static(uploadsDir));
 
-  await app.listen(3000);
-  Logger.log('Backend running on http://localhost:3000', 'Bootstrap');
+  const port = process.env.PORT ?? 3000;
+  await app.listen(port);
+  Logger.log(`Backend running on port ${port}`, 'Bootstrap');
 }
 bootstrap();

@@ -36,7 +36,7 @@ export class AttendanceService {
         where: { id: dto.geofenceZoneId, active: true },
       });
       if (!zone) throw new NotFoundException('Geofence zone not found or inactive');
-      if (!employee.geofenceZoneIds.includes(zone.id)) {
+      if (!(employee.geofenceZoneIds as string[]).includes(zone.id)) {
         throw new BadRequestException('This geofence zone is not assigned to your profile');
       }
 
