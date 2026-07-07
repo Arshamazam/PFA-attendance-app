@@ -16,7 +16,6 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, PieChart, Pie, Cell, Legend,
 } from "recharts";
-import type { TooltipProps } from "recharts";
 import type { Employee, LeaveRequest, AttendanceRecord } from "@/types";
 import { format, parseISO } from "date-fns";
 
@@ -53,7 +52,11 @@ function initials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) {
+function ChartTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: Array<{ value: number | string }>;
+  label?: string;
+}) {
   if (!active || !payload?.length) return null;
   return (
     <div className="bg-white border border-gray-100 shadow-xl rounded-2xl px-4 py-3 pointer-events-none">
