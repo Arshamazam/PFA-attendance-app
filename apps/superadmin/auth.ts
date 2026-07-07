@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
+  trustHost: true,
   cookies: {
     sessionToken: {
       name: "superadmin.session-token",
@@ -9,7 +10,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         httpOnly: true,
         sameSite: "lax" as const,
         path: "/",
-        secure: process.env.NODE_ENV === "production",
+        secure: false,
       },
     },
   },
