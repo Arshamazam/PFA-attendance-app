@@ -20,7 +20,7 @@ class UnauthorizedException extends ApiException {
 }
 
 class ApiService {
-  static String _baseUrl = 'http://172.20.10.4:3000';
+  static String _baseUrl = 'http://187.127.125.215:3000';
   static String get baseUrl => _baseUrl;
 
   // Call once in main() before runApp — detects iOS Simulator vs real device
