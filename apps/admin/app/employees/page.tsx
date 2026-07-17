@@ -18,7 +18,6 @@ import { format, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
-const DEPARTMENTS = ["All", "Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad"];
 const DESIGNATIONS = ["All", "Food Inspector", "Senior Inspector", "Supervisor", "Manager", "Admin", "Other"];
 const LIMITS = [10, 25, 50];
 
@@ -43,6 +42,12 @@ export default function EmployeesPage() {
 
   const [search, setSearch] = useState("");
   const [department, setDepartment] = useState("All");
+
+  const { data: departmentList = [] } = useQuery<string[]>({
+    queryKey: ["employee-departments"],
+    queryFn: () => api.get<string[]>("/employees/departments").then((r) => r.data),
+    staleTime: 5 * 60 * 1000,
+  });
   const [designation, setDesignation] = useState("All");
   const [status, setStatus] = useState("all");
   const [page, setPage] = useState(1);
@@ -158,12 +163,15 @@ export default function EmployeesPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                placeholder="Search name, email, ID..." className="pl-9 h-9 w-56" />
+                placeholder="Search name, email, district..." className="pl-9 h-9 w-56" />
             </div>
             {/* Department */}
             <Select value={department} onValueChange={(v) => { if (v) { setDepartment(v); setPage(1); } }}>
-              <SelectTrigger className="h-9 w-36 border-2 border-gray-300 hover:border-gray-400 focus-visible:border-[#006B3F] focus-visible:ring-2 focus-visible:ring-[#006B3F]/20"><SelectValue /></SelectTrigger>
-              <SelectContent>{DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d === "All" ? "All Depts" : d}</SelectItem>)}</SelectContent>
+              <SelectTrigger className="h-9 w-40 border-2 border-gray-300 hover:border-gray-400 focus-visible:border-[#006B3F] focus-visible:ring-2 focus-visible:ring-[#006B3F]/20"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Districts</SelectItem>
+                {departmentList.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+              </SelectContent>
             </Select>
             {/* Designation */}
             <Select value={designation} onValueChange={(v) => { if (v) { setDesignation(v); setPage(1); } }}>
@@ -384,7 +392,7 @@ export default function EmployeesPage() {
                     className="w-full h-10 text-sm border border-gray-200 rounded-xl px-3 bg-white focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F]/50"
                   >
                     <option value="">Select dept…</option>
-                    {DEPARTMENTS.filter((d) => d !== "All" && d !== transferTarget.department).map((d) => (
+                    {departmentList.filter((d) => d !== transferTarget.department).map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>

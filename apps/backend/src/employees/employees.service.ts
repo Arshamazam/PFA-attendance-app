@@ -80,6 +80,7 @@ export class EmployeesService {
         { employeeCode: { contains: search, mode: 'insensitive' } },
         { mobilePhone: { contains: search, mode: 'insensitive' } },
         { cnic: { contains: search, mode: 'insensitive' } },
+        { department: { contains: search, mode: 'insensitive' } },
       ];
     }
     const [employees, total] = await Promise.all([
@@ -107,6 +108,16 @@ export class EmployeesService {
     }
 
     return employee;
+  }
+
+  async getDepartments() {
+    const rows = await this.prisma.employee.findMany({
+      where: { deletedAt: null, department: { not: null } },
+      select: { department: true },
+      distinct: ['department'],
+      orderBy: { department: 'asc' },
+    });
+    return rows.map((r) => r.department).filter(Boolean) as string[];
   }
 
   async checkUnique(field: 'email' | 'cnic' | 'badgeNumber', value: string) {

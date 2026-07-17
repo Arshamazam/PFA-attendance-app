@@ -63,6 +63,12 @@ export class EmployeesController {
     );
   }
 
+  @Get('departments')
+  @Roles('admin', 'manager', 'super_admin')
+  getDepartments() {
+    return this.employeesService.getDepartments();
+  }
+
   @Get('check-unique/:field/:value')
   @Roles('admin', 'manager')
   checkUnique(
