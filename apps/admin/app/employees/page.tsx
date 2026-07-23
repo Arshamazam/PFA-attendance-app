@@ -54,6 +54,7 @@ export default function EmployeesPage() {
   const [limit, setLimit] = useState(10);
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [isExporting, setIsExporting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Employee | null>(null);
   const [transferTarget, setTransferTarget] = useState<Employee | null>(null);
   const [toDept, setToDept] = useState("");
@@ -135,18 +136,34 @@ export default function EmployeesPage() {
 
   const hasFilters = search || department !== "All" || designation !== "All" || status !== "all";
 
-  function exportCSV() {
-    const header = ["Employee ID", "Name", "Email", "Designation", "Department", "Mobile", "Status", "Joined"];
-    const csvRows = (data?.data ?? []).map((e) => [
-      e.employeeCode ?? "", e.name, e.email, e.designation ?? "", e.department ?? "",
-      e.mobilePhone ?? "", e.active !== false ? "Active" : "Inactive",
-      e.createdAt ? format(parseISO(e.createdAt), "yyyy-MM-dd") : "",
-    ]);
-    const csv = [header, ...csvRows].map((r) => r.map((v) => `"${v}"`).join(",")).join("\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
-    const a = document.createElement("a"); a.href = url; a.download = `employees_${format(new Date(), "yyyy-MM-dd")}.csv`; a.click();
-    URL.revokeObjectURL(url);
-    toast.success("CSV exported");
+  async function exportCSV() {
+    setIsExporting(true);
+    try {
+      const exportParams = new URLSearchParams({
+        page: "1",
+        limit: "9999",
+        ...(debouncedSearch && { search: debouncedSearch }),
+        ...(department !== "All" && { department }),
+        ...(status !== "all" && { status }),
+      });
+      const res = await api.get<PaginatedResponse<Employee>>(`/employees?${exportParams}`);
+      const all = res.data.data;
+      const header = ["Employee ID", "Name", "Email", "Designation", "Department", "Mobile", "Status", "Joined"];
+      const csvRows = all.map((e) => [
+        e.employeeCode ?? "", e.name, e.email, e.designation ?? "", e.department ?? "",
+        e.mobilePhone ?? "", e.active !== false ? "Active" : "Inactive",
+        e.createdAt ? format(parseISO(e.createdAt), "yyyy-MM-dd") : "",
+      ]);
+      const csv = [header, ...csvRows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+      const a = document.createElement("a"); a.href = url; a.download = `employees_${format(new Date(), "yyyy-MM-dd")}.csv`; a.click();
+      URL.revokeObjectURL(url);
+      toast.success(`CSV exported — ${all.length} employees`);
+    } catch {
+      toast.error("Export failed");
+    } finally {
+      setIsExporting(false);
+    }
   }
 
   const SortIcon = ({ col }: { col: SortKey }) => (
@@ -197,8 +214,8 @@ export default function EmployeesPage() {
             <Button variant="outline" size="sm" className="h-9 gap-1.5" onClick={() => refetch()}>
               <RefreshCw className="w-3.5 h-3.5" />
             </Button>
-            <Button variant="outline" size="sm" className="h-9 gap-1.5 border-[#006B3F] text-[#006B3F] hover:bg-green-50" onClick={exportCSV}>
-              <Download className="w-3.5 h-3.5" /> CSV
+            <Button variant="outline" size="sm" className="h-9 gap-1.5 border-[#006B3F] text-[#006B3F] hover:bg-green-50" onClick={exportCSV} disabled={isExporting}>
+              {isExporting ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />} CSV
             </Button>
             <Button onClick={() => router.push("/employees/add")} className="h-9 bg-[#006B3F] hover:bg-[#005530] text-white gap-1.5">
               <Plus className="w-4 h-4" /> Add Employee
