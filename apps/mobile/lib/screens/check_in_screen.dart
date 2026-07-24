@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
@@ -60,9 +61,31 @@ class _CheckInScreenState extends State<CheckInScreen> {
       // 2. Get current position (best-effort — exempted employees don't strictly need it)
       Position? position;
       if (perm != LocationPermission.denied && perm != LocationPermission.deniedForever) {
-        position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
-        );
+        try {
+          // High accuracy (GPS) with 10s timeout — can be slow indoors
+          position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.high,
+              timeLimit: Duration(seconds: 10),
+            ),
+          );
+        } catch (_) {
+          // GPS timed out or unavailable (common indoors); try last known position first
+          position = await Geolocator.getLastKnownPosition();
+          if (position == null) {
+            try {
+              // Fall back to network/WiFi location — fast and works indoors
+              position = await Geolocator.getCurrentPosition(
+                locationSettings: const LocationSettings(
+                  accuracy: LocationAccuracy.medium,
+                  timeLimit: Duration(seconds: 8),
+                ),
+              );
+            } catch (_) {
+              // Still no fix — position stays null; handled below
+            }
+          }
+        }
       }
       _position = position;
 
