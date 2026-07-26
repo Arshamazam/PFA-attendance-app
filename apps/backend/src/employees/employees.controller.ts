@@ -31,6 +31,7 @@ export class EmployeesController {
     @Query('search') search?: string,
     @Query('department') department?: string,
     @Query('status') status?: string,
+    @Query('designation') designation?: string,
   ) {
     return this.employeesService.findAll(
       page ? parseInt(page, 10) : 1,
@@ -39,6 +40,7 @@ export class EmployeesController {
       search,
       department,
       status,
+      designation,
     );
   }
 

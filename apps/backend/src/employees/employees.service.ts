@@ -66,11 +66,12 @@ export class EmployeesService {
 
   constructor(private prisma: PrismaService) {}
 
-  async findAll(page = 1, limit = 20, role?: string, search?: string, department?: string, status?: string) {
+  async findAll(page = 1, limit = 20, role?: string, search?: string, department?: string, status?: string, designation?: string) {
     const skip = (page - 1) * limit;
     const where: Record<string, unknown> = { deletedAt: null };
     if (role) where.role = role;
     if (department) where.department = department;
+    if (designation) where.designation = designation;
     if (status === 'active') where.active = true;
     else if (status === 'inactive') where.active = false;
     if (search) {
@@ -78,9 +79,10 @@ export class EmployeesService {
         { name: { contains: search, mode: 'insensitive' } },
         { email: { contains: search, mode: 'insensitive' } },
         { employeeCode: { contains: search, mode: 'insensitive' } },
-        { mobilePhone: { contains: search, mode: 'insensitive' } },
-        { cnic: { contains: search, mode: 'insensitive' } },
+        { mobilePhone: { contains: search } },
+        { cnic: { contains: search } },
         { department: { contains: search } },
+        { designation: { contains: search } },
       ];
     }
     const [employees, total] = await Promise.all([

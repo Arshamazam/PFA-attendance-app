@@ -68,6 +68,7 @@ export default function EmployeesPage() {
     limit: String(limit),
     ...(debouncedSearch && { search: debouncedSearch }),
     ...(department !== "All" && { department }),
+    ...(designation !== "All" && { designation }),
     ...(status !== "all" && { status }),
   });
 
@@ -77,9 +78,8 @@ export default function EmployeesPage() {
     placeholderData: (prev) => prev,
   });
 
-  // Client-side designation filter + sort
+  // Client-side sort only (designation filter is now server-side)
   const rows = [...(data?.data ?? [])]
-    .filter((e) => designation === "All" || e.designation === designation)
     .sort((a, b) => {
       const av = (a[sortKey as keyof Employee] as string) ?? "";
       const bv = (b[sortKey as keyof Employee] as string) ?? "";
@@ -144,6 +144,7 @@ export default function EmployeesPage() {
         limit: "9999",
         ...(debouncedSearch && { search: debouncedSearch }),
         ...(department !== "All" && { department }),
+        ...(designation !== "All" && { designation }),
         ...(status !== "all" && { status }),
       });
       const res = await api.get<PaginatedResponse<Employee>>(`/employees?${exportParams}`);
@@ -180,7 +181,7 @@ export default function EmployeesPage() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
               <Input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                placeholder="Search name, email, district..." className="pl-9 h-9 w-56" />
+                placeholder="Name, CNIC, phone, email..." className="pl-9 h-9 w-64" />
             </div>
             {/* Department */}
             <Select value={department} onValueChange={(v) => { if (v) { setDepartment(v); setPage(1); } }}>
