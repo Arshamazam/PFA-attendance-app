@@ -145,7 +145,7 @@ export class AttendanceService {
     return { data: records, total, page, limit };
   }
 
-  async getStatistics(date?: string, zoneId?: string) {
+  async getStatistics(date?: string, zoneId?: string, department?: string) {
     // PKT is UTC+5; interpret date param in PKT so "today" boundaries match local working hours
     const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
     const dateStr =
@@ -158,9 +158,25 @@ export class AttendanceService {
     const attWhere: Record<string, unknown> = { checkInTime: { gte: start, lt: end } };
     if (zoneId) attWhere.geofenceZoneId = zoneId;
 
+    // If department filter active, restrict attendance to employees in that department
+    if (department) {
+      const deptEmps = await this.prisma.employee.findMany({
+        where: { deletedAt: null, department },
+        select: { id: true },
+      });
+      attWhere.employeeId = { in: deptEmps.map((e) => e.id) };
+    }
+
     let totalEmployees: number;
-    if (zoneId) {
-      // Count employees whose geofenceZoneIds JSON array contains this zone
+    if (zoneId && department) {
+      const rows = await this.prisma.$queryRaw<[{ cnt: bigint }]>`
+        SELECT COUNT(*) AS cnt FROM Employee
+        WHERE deletedAt IS NULL AND active = 1
+        AND JSON_CONTAINS(geofenceZoneIds, JSON_QUOTE(${zoneId}))
+        AND department = ${department}
+      `;
+      totalEmployees = Number(rows[0].cnt);
+    } else if (zoneId) {
       const rows = await this.prisma.$queryRaw<[{ cnt: bigint }]>`
         SELECT COUNT(*) AS cnt FROM Employee
         WHERE deletedAt IS NULL AND active = 1
@@ -168,7 +184,9 @@ export class AttendanceService {
       `;
       totalEmployees = Number(rows[0].cnt);
     } else {
-      totalEmployees = await this.prisma.employee.count({ where: { deletedAt: null, active: true } });
+      const empFilter: Record<string, unknown> = { deletedAt: null, active: true };
+      if (department) empFilter.department = department;
+      totalEmployees = await this.prisma.employee.count({ where: empFilter });
     }
 
     const records = await this.prisma.attendance.findMany({
@@ -218,7 +236,7 @@ export class AttendanceService {
     };
   }
 
-  async getTrend(days = 30, zoneId?: string) {
+  async getTrend(days = 30, zoneId?: string, department?: string) {
     const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
     // End = end of today in PKT
     const nowPkt = new Date(Date.now() + PKT_OFFSET_MS);
@@ -229,6 +247,13 @@ export class AttendanceService {
 
     const attWhere: Record<string, unknown> = { checkInTime: { gte: start, lt: end } };
     if (zoneId) attWhere.geofenceZoneId = zoneId;
+    if (department) {
+      const deptEmps = await this.prisma.employee.findMany({
+        where: { deletedAt: null, department },
+        select: { id: true },
+      });
+      attWhere.employeeId = { in: deptEmps.map((e) => e.id) };
+    }
 
     const records = await this.prisma.attendance.findMany({
       where: attWhere,

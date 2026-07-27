@@ -86,6 +86,7 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const firstName = (session?.user?.name ?? "Admin").split(" ")[0];
   const [selectedZoneId, setSelectedZoneId] = useState<string>("");
+  const [selectedDepartment, setSelectedDepartment] = useState<string>("");
   const [trendDays, setTrendDays] = useState<number>(7);
 
   const { data: employees } = useQuery({
@@ -96,23 +97,32 @@ export default function DashboardPage() {
     queryKey: ["geofences-all"],
     queryFn: () => api.get<{ id: string; name: string }[]>("/geofence").then((r) => r.data),
   });
+  const { data: departments } = useQuery({
+    queryKey: ["employee-departments"],
+    queryFn: () => api.get<string[]>("/employees/departments").then((r) => r.data),
+    staleTime: 5 * 60_000,
+  });
   // Use the statistics endpoint for accurate PKT-based today counts
   const { data: stats } = useQuery({
-    queryKey: ["attendance-stats-today", selectedZoneId],
+    queryKey: ["attendance-stats-today", selectedZoneId, selectedDepartment],
     queryFn: () => {
-      const url = selectedZoneId
-        ? `/attendance/statistics?zoneId=${encodeURIComponent(selectedZoneId)}`
-        : "/attendance/statistics";
-      return api.get<{ totalCheckIns: number; onTime: number; late: number; absent: number; totalEmployees: number }>(url).then((r) => r.data);
+      const params = new URLSearchParams();
+      if (selectedZoneId) params.set("zoneId", selectedZoneId);
+      if (selectedDepartment) params.set("department", selectedDepartment);
+      const qs = params.toString();
+      return api.get<{ totalCheckIns: number; onTime: number; late: number; absent: number; totalEmployees: number }>(
+        `/attendance/statistics${qs ? `?${qs}` : ""}`
+      ).then((r) => r.data);
     },
     refetchInterval: 60_000,
   });
   // Use the trend endpoint for accurate chart
   const { data: trendRaw } = useQuery({
-    queryKey: ["attendance-trend", trendDays, selectedZoneId],
+    queryKey: ["attendance-trend", trendDays, selectedZoneId, selectedDepartment],
     queryFn: () => {
       const params = new URLSearchParams({ days: String(trendDays) });
       if (selectedZoneId) params.set("zoneId", selectedZoneId);
+      if (selectedDepartment) params.set("department", selectedDepartment);
       return api.get<{ date: string; total: number; onTime: number; late: number }[]>(`/attendance/trend?${params}`).then((r) => r.data);
     },
   });
@@ -156,14 +166,16 @@ export default function DashboardPage() {
 
   /* KPI card definitions */
   const selectedZoneName = selectedZoneId
-    ? (geofences?.find((z) => z.id === selectedZoneId)?.name ?? "").replace(/^Punjab Food Authority\s*/i, "").trim()
+    ? (geofences?.find((z) => z.id === selectedZoneId)?.name ?? "")
+        .replace(/^Punjab Food Authority\s*/i, "").replace(/^,\s*/, "").trim()
     : "";
+  const filtersActive = !!(selectedZoneId || selectedDepartment || trendDays !== 7);
 
   const kpiCards = [
     {
-      label: selectedZoneId ? `${selectedZoneName} Staff` : "Total Employees",
-      value: selectedZoneId ? (stats?.totalEmployees ?? "—") : (employees?.total ?? "—"),
-      sub: selectedZoneId ? `in ${selectedZoneName}` : "Active workforce",
+      label: (selectedZoneId || selectedDepartment) ? "Filtered Staff" : "Total Employees",
+      value: (selectedZoneId || selectedDepartment) ? (stats?.totalEmployees ?? "—") : (employees?.total ?? "—"),
+      sub: selectedZoneName || selectedDepartment || "Active workforce",
       icon: Users,
       gradient: "linear-gradient(135deg, #006B3F 0%, #00A651 100%)",
       shadow: "0 10px 30px -6px rgba(0,107,63,0.45)",
@@ -279,9 +291,9 @@ export default function DashboardPage() {
               {/* ── Snapshot Stats */}
               <div className="flex items-center gap-5 sm:gap-8 shrink-0 sm:self-center">
                 {[
-                  { label: "Check-Ins", value: stats?.totalCheckIns ?? 0, sub: selectedZoneName || "today" },
+                  { label: "Check-Ins", value: stats?.totalCheckIns ?? 0, sub: selectedZoneName || selectedDepartment || "today" },
                   { label: "Leaves", value: leaves?.total ?? 0, sub: "pending" },
-                  { label: "Staff", value: stats?.totalEmployees ?? employees?.total ?? 0, sub: selectedZoneName || "employees" },
+                  { label: "Staff", value: stats?.totalEmployees ?? employees?.total ?? 0, sub: selectedZoneName || selectedDepartment || "total" },
                 ].map(({ label, value, sub }, i) => (
                   <React.Fragment key={label}>
                     {i > 0 && <div className="w-px h-14 bg-white/10" />}
@@ -303,28 +315,28 @@ export default function DashboardPage() {
         ══════════════════════════════════════════ */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
           <div className="flex flex-wrap items-end gap-4">
+
             {/* Label */}
-            <div className="flex items-center gap-1.5 pb-1 shrink-0">
+            <div className="flex items-center gap-1.5 pb-2 shrink-0">
               <SlidersHorizontal size={13} className="text-[#006B3F]" />
               <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Filters</span>
             </div>
 
-            {/* Zone dropdown */}
-            <div className="flex flex-col gap-1 min-w-[180px]">
-              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Zone / Location</label>
+            {/* District / Zone */}
+            <div className="flex flex-col gap-1 min-w-[170px]">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">District / Zone</label>
               <div className="relative">
                 <select
                   value={selectedZoneId}
                   onChange={(e) => setSelectedZoneId(e.target.value)}
                   className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
                 >
-                  <option value="">All Zones</option>
+                  <option value="">All Districts</option>
                   {Array.isArray(geofences) && geofences.map((zone) => {
                     if (!zone?.id) return null;
                     const label = (zone.name ?? "")
                       .replace(/^Punjab Food Authority\s*/i, "")
-                      .replace(/^,\s*/, "")
-                      .trim() || zone.name;
+                      .replace(/^,\s*/, "").trim() || zone.name;
                     return <option key={zone.id} value={zone.id}>{label}</option>;
                   })}
                 </select>
@@ -332,8 +344,26 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Period dropdown */}
-            <div className="flex flex-col gap-1 min-w-[150px]">
+            {/* Department */}
+            <div className="flex flex-col gap-1 min-w-[170px]">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Department</label>
+              <div className="relative">
+                <select
+                  value={selectedDepartment}
+                  onChange={(e) => setSelectedDepartment(e.target.value)}
+                  className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
+                >
+                  <option value="">All Departments</option>
+                  {Array.isArray(departments) && departments.map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Chart Period */}
+            <div className="flex flex-col gap-1 min-w-[140px]">
               <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Chart Period</label>
               <div className="relative">
                 <select
@@ -350,31 +380,47 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Active filter badges + reset */}
-            {(selectedZoneId || trendDays !== 7) && (
-              <div className="flex items-center gap-2 pb-1 flex-wrap">
-                {selectedZoneId && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#006B3F]/10 text-[#006B3F] text-[12px] font-semibold">
-                    <MapPin size={10} />
-                    {(geofences?.find((z) => z.id === selectedZoneId)?.name ?? "")
-                      .replace(/^Punjab Food Authority\s*/i, "").replace(/^,\s*/, "").trim()}
-                  </span>
-                )}
-                {trendDays !== 7 && (
-                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[12px] font-semibold">
-                    <Clock size={10} />
-                    {trendDays}d chart
-                  </span>
-                )}
-                <button
-                  onClick={() => { setSelectedZoneId(""); setTrendDays(7); }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 text-[12px] font-semibold hover:bg-gray-200 transition-colors"
-                >
-                  <X size={10} /> Reset
-                </button>
-              </div>
+            {/* Reset */}
+            {filtersActive && (
+              <button
+                onClick={() => { setSelectedZoneId(""); setSelectedDepartment(""); setTrendDays(7); }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-500 text-[12px] font-semibold hover:bg-red-100 transition-colors border border-red-100 mb-0.5"
+              >
+                <X size={11} /> Clear All
+              </button>
             )}
           </div>
+
+          {/* Active filter badges */}
+          {filtersActive && (
+            <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-50">
+              <span className="text-[11px] text-gray-400 font-medium self-center">Active:</span>
+              {selectedZoneName && (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#006B3F]/10 text-[#006B3F] text-[12px] font-semibold cursor-pointer hover:bg-[#006B3F]/20"
+                  onClick={() => setSelectedZoneId("")}
+                >
+                  <MapPin size={10} /> {selectedZoneName} <X size={9} />
+                </span>
+              )}
+              {selectedDepartment && (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[12px] font-semibold cursor-pointer hover:bg-blue-100"
+                  onClick={() => setSelectedDepartment("")}
+                >
+                  <Users size={10} /> {selectedDepartment} <X size={9} />
+                </span>
+              )}
+              {trendDays !== 7 && (
+                <span
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-600 text-[12px] font-semibold cursor-pointer hover:bg-purple-100"
+                  onClick={() => setTrendDays(7)}
+                >
+                  <Clock size={10} /> Last {trendDays} days <X size={9} />
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ══════════════════════════════════════════
