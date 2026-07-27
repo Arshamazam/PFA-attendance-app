@@ -357,7 +357,7 @@ export default function DashboardPage() {
                       <Pie data={deptData.slice(0, 7)} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="count" nameKey="department">
                         {deptData.slice(0, 7).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                       </Pie>
-                      <Tooltip formatter={(v: number, n: string) => [v, n]} />
+                      <Tooltip />
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="space-y-1.5 mt-1">
