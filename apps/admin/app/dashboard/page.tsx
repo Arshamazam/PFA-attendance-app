@@ -298,9 +298,9 @@ export default function DashboardPage() {
         </div>
 
         {/* ══════════════════════════════════════════
-            DISTRICT / ZONE FILTER
+            ZONE FILTER BAR
         ══════════════════════════════════════════ */}
-        {geofences && geofences.length > 0 && (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3">
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider shrink-0">
               <MapPin size={11} className="text-[#006B3F]" />
@@ -315,15 +315,16 @@ export default function DashboardPage() {
                 borderColor: "#006B3F",
                 boxShadow: "0 2px 8px rgba(0,107,63,0.35)",
               } : {
-                background: "white",
+                background: "#F9FAFB",
                 color: "#374151",
                 borderColor: "#E5E7EB",
               }}
             >
               All Zones
             </button>
-            {geofences.map((zone) => {
-              const label = zone.name.replace(/^Punjab Food Authority\s*/i, "").trim();
+            {Array.isArray(geofences) && geofences.map((zone) => {
+              if (!zone || !zone.id) return null;
+              const label = (zone.name ?? "").replace(/^Punjab Food Authority\s*/i, "").trim() || zone.name;
               const active = selectedZoneId === zone.id;
               return (
                 <button
@@ -336,7 +337,7 @@ export default function DashboardPage() {
                     borderColor: "#006B3F",
                     boxShadow: "0 2px 8px rgba(0,107,63,0.35)",
                   } : {
-                    background: "white",
+                    background: "#F9FAFB",
                     color: "#374151",
                     borderColor: "#E5E7EB",
                   }}
@@ -345,8 +346,11 @@ export default function DashboardPage() {
                 </button>
               );
             })}
+            {!geofences && (
+              <span className="text-[12px] text-gray-400 italic">Loading zones...</span>
+            )}
           </div>
-        )}
+        </div>
 
         {/* ══════════════════════════════════════════
             KPI TILES
