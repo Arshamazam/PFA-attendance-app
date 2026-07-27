@@ -79,14 +79,20 @@ export class AttendanceController {
 
   @Get('statistics')
   @Roles('admin', 'manager')
-  getStatistics(@Query('date') date?: string) {
-    return this.attendanceService.getStatistics(date);
+  getStatistics(
+    @Query('date') date?: string,
+    @Query('district') district?: string,
+  ) {
+    return this.attendanceService.getStatistics(date, district);
   }
 
   @Get('trend')
   @Roles('admin', 'manager')
-  getTrend(@Query('days') days?: string) {
-    return this.attendanceService.getTrend(days ? parseInt(days, 10) : 30);
+  getTrend(
+    @Query('days') days?: string,
+    @Query('district') district?: string,
+  ) {
+    return this.attendanceService.getTrend(days ? parseInt(days, 10) : 30, district);
   }
 
   @Get('employee/:id')

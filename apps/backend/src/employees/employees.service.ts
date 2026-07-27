@@ -76,9 +76,9 @@ export class EmployeesService {
     else if (status === 'inactive') where.active = false;
     if (search) {
       where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { employeeCode: { contains: search, mode: 'insensitive' } },
+        { name: { contains: search } },
+        { email: { contains: search } },
+        { employeeCode: { contains: search } },
         { mobilePhone: { contains: search } },
         { cnic: { contains: search } },
         { department: { contains: search } },
@@ -118,6 +118,15 @@ export class EmployeesService {
       select: { department: true },
     });
     const unique = [...new Set(rows.map((r) => r.department).filter(Boolean))];
+    return unique.sort() as string[];
+  }
+
+  async getDistricts() {
+    const rows = await this.prisma.employee.findMany({
+      where: { deletedAt: null, addressDistrict: { not: null } },
+      select: { addressDistrict: true },
+    });
+    const unique = [...new Set(rows.map((r) => r.addressDistrict).filter(Boolean))];
     return unique.sort() as string[];
   }
 

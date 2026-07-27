@@ -145,7 +145,7 @@ export class AttendanceService {
     return { data: records, total, page, limit };
   }
 
-  async getStatistics(date?: string) {
+  async getStatistics(date?: string, district?: string) {
     // PKT is UTC+5; interpret date param in PKT so "today" boundaries match local working hours
     const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
     const dateStr =
@@ -155,12 +155,24 @@ export class AttendanceService {
     const start = new Date(Date.UTC(y, mo - 1, d, 0, 0, 0, 0) - PKT_OFFSET_MS);
     const end = new Date(start.getTime() + 86_400_000);
 
+    const empWhere: Record<string, unknown> = { deletedAt: null, active: true };
+    const attWhere: Record<string, unknown> = { checkInTime: { gte: start, lt: end } };
+
+    if (district) {
+      empWhere.addressDistrict = district;
+      const districtEmpIds = await this.prisma.employee.findMany({
+        where: { deletedAt: null, addressDistrict: district },
+        select: { id: true },
+      });
+      attWhere.employeeId = { in: districtEmpIds.map((e) => e.id) };
+    }
+
     const [records, totalEmployees] = await Promise.all([
       this.prisma.attendance.findMany({
-        where: { checkInTime: { gte: start, lt: end } },
+        where: attWhere,
         include: { employee: { select: { name: true, department: true } } },
       }),
-      this.prisma.employee.count({ where: { deletedAt: null, active: true } }),
+      this.prisma.employee.count({ where: empWhere }),
     ]);
 
     // Interpret check-in hour in PKT
@@ -205,7 +217,7 @@ export class AttendanceService {
     };
   }
 
-  async getTrend(days = 30) {
+  async getTrend(days = 30, district?: string) {
     const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
     // End = end of today in PKT
     const nowPkt = new Date(Date.now() + PKT_OFFSET_MS);
@@ -214,8 +226,17 @@ export class AttendanceService {
     const end = new Date(Date.UTC(ty, tm - 1, td + 1, 0, 0, 0, 0) - PKT_OFFSET_MS); // tomorrow PKT midnight in UTC
     const start = new Date(end.getTime() - days * 86_400_000);
 
+    const attWhere: Record<string, unknown> = { checkInTime: { gte: start, lt: end } };
+    if (district) {
+      const districtEmpIds = await this.prisma.employee.findMany({
+        where: { deletedAt: null, addressDistrict: district },
+        select: { id: true },
+      });
+      attWhere.employeeId = { in: districtEmpIds.map((e) => e.id) };
+    }
+
     const records = await this.prisma.attendance.findMany({
-      where: { checkInTime: { gte: start, lt: end } },
+      where: attWhere,
       select: { checkInTime: true },
     });
 
