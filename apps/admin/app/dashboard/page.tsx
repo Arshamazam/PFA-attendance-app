@@ -9,6 +9,7 @@ import Link from "next/link";
 import {
   Users, MapPin, CheckCircle2, Calendar, Clock,
   ArrowLeftRight, UserX, Activity, UserPlus, CalendarCheck, BarChart3,
+  SlidersHorizontal, ChevronDown, X,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -85,6 +86,7 @@ export default function DashboardPage() {
   const { data: session } = useSession();
   const firstName = (session?.user?.name ?? "Admin").split(" ")[0];
   const [selectedZoneId, setSelectedZoneId] = useState<string>("");
+  const [trendDays, setTrendDays] = useState<number>(7);
 
   const { data: employees } = useQuery({
     queryKey: ["employees-all"],
@@ -105,14 +107,13 @@ export default function DashboardPage() {
     },
     refetchInterval: 60_000,
   });
-  // Use the trend endpoint for accurate 7-day chart
+  // Use the trend endpoint for accurate chart
   const { data: trendRaw } = useQuery({
-    queryKey: ["attendance-trend-7", selectedZoneId],
+    queryKey: ["attendance-trend", trendDays, selectedZoneId],
     queryFn: () => {
-      const url = selectedZoneId
-        ? `/attendance/trend?days=7&zoneId=${encodeURIComponent(selectedZoneId)}`
-        : "/attendance/trend?days=7";
-      return api.get<{ date: string; total: number; onTime: number; late: number }[]>(url).then((r) => r.data);
+      const params = new URLSearchParams({ days: String(trendDays) });
+      if (selectedZoneId) params.set("zoneId", selectedZoneId);
+      return api.get<{ date: string; total: number; onTime: number; late: number }[]>(`/attendance/trend?${params}`).then((r) => r.data);
     },
   });
   // Recent check-ins list only — small fetch, just for display
@@ -298,56 +299,80 @@ export default function DashboardPage() {
         </div>
 
         {/* ══════════════════════════════════════════
-            ZONE FILTER BAR
+            FILTER BAR
         ══════════════════════════════════════════ */}
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-4 py-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider shrink-0">
-              <MapPin size={11} className="text-[#006B3F]" />
-              Filter by Zone
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
+          <div className="flex flex-wrap items-end gap-4">
+            {/* Label */}
+            <div className="flex items-center gap-1.5 pb-1 shrink-0">
+              <SlidersHorizontal size={13} className="text-[#006B3F]" />
+              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Filters</span>
             </div>
-            <button
-              onClick={() => setSelectedZoneId("")}
-              className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-150 border"
-              style={selectedZoneId === "" ? {
-                background: "#006B3F",
-                color: "white",
-                borderColor: "#006B3F",
-                boxShadow: "0 2px 8px rgba(0,107,63,0.35)",
-              } : {
-                background: "#F9FAFB",
-                color: "#374151",
-                borderColor: "#E5E7EB",
-              }}
-            >
-              All Zones
-            </button>
-            {Array.isArray(geofences) && geofences.map((zone) => {
-              if (!zone || !zone.id) return null;
-              const label = (zone.name ?? "").replace(/^Punjab Food Authority\s*/i, "").trim() || zone.name;
-              const active = selectedZoneId === zone.id;
-              return (
-                <button
-                  key={zone.id}
-                  onClick={() => setSelectedZoneId(active ? "" : zone.id)}
-                  className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-150 border"
-                  style={active ? {
-                    background: "#006B3F",
-                    color: "white",
-                    borderColor: "#006B3F",
-                    boxShadow: "0 2px 8px rgba(0,107,63,0.35)",
-                  } : {
-                    background: "#F9FAFB",
-                    color: "#374151",
-                    borderColor: "#E5E7EB",
-                  }}
+
+            {/* Zone dropdown */}
+            <div className="flex flex-col gap-1 min-w-[180px]">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Zone / Location</label>
+              <div className="relative">
+                <select
+                  value={selectedZoneId}
+                  onChange={(e) => setSelectedZoneId(e.target.value)}
+                  className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
                 >
-                  {label}
+                  <option value="">All Zones</option>
+                  {Array.isArray(geofences) && geofences.map((zone) => {
+                    if (!zone?.id) return null;
+                    const label = (zone.name ?? "")
+                      .replace(/^Punjab Food Authority\s*/i, "")
+                      .replace(/^,\s*/, "")
+                      .trim() || zone.name;
+                    return <option key={zone.id} value={zone.id}>{label}</option>;
+                  })}
+                </select>
+                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Period dropdown */}
+            <div className="flex flex-col gap-1 min-w-[150px]">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Chart Period</label>
+              <div className="relative">
+                <select
+                  value={trendDays}
+                  onChange={(e) => setTrendDays(Number(e.target.value))}
+                  className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
+                >
+                  <option value={7}>Last 7 Days</option>
+                  <option value={14}>Last 14 Days</option>
+                  <option value={30}>Last 30 Days</option>
+                  <option value={90}>Last 90 Days</option>
+                </select>
+                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Active filter badges + reset */}
+            {(selectedZoneId || trendDays !== 7) && (
+              <div className="flex items-center gap-2 pb-1 flex-wrap">
+                {selectedZoneId && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#006B3F]/10 text-[#006B3F] text-[12px] font-semibold">
+                    <MapPin size={10} />
+                    {(geofences?.find((z) => z.id === selectedZoneId)?.name ?? "")
+                      .replace(/^Punjab Food Authority\s*/i, "").replace(/^,\s*/, "").trim()}
+                  </span>
+                )}
+                {trendDays !== 7 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[12px] font-semibold">
+                    <Clock size={10} />
+                    {trendDays}d chart
+                  </span>
+                )}
+                <button
+                  onClick={() => { setSelectedZoneId(""); setTrendDays(7); }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 text-gray-500 text-[12px] font-semibold hover:bg-gray-200 transition-colors"
+                >
+                  <X size={10} /> Reset
                 </button>
-              );
-            })}
-            {!geofences && (
-              <span className="text-[12px] text-gray-400 italic">Loading zones...</span>
+              </div>
             )}
           </div>
         </div>
@@ -396,10 +421,10 @@ export default function DashboardPage() {
               <CardHeader className="pb-0 pt-5 px-5 flex flex-row items-center justify-between">
                 <CardTitle className="text-sm font-bold text-gray-700 flex items-center gap-2">
                   <Activity size={14} className="text-[#006B3F]" />
-                  Attendance — Last 7 Days
+                  Attendance — Last {trendDays} Days
                 </CardTitle>
                 <span className="text-[10px] text-gray-400 font-medium bg-gray-100 px-2 py-0.5 rounded-lg">
-                  7 day view
+                  {trendDays}d view
                 </span>
               </CardHeader>
               <CardContent className="px-2 pb-4 pt-3">
