@@ -7,7 +7,7 @@ import api from "@/lib/api";
 import { format, parseISO } from "date-fns";
 import {
   MapPin, Clock, CheckCircle2, AlertCircle, RefreshCw,
-  ChevronDown, Navigation, Wifi, Eye, X,
+  ChevronDown, Navigation, Wifi, Eye, X, Calendar,
 } from "lucide-react";
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -73,6 +73,16 @@ export default function LocationMonitorPage() {
   const [lastRefresh, setLastRefresh]   = useState(new Date());
 
   const today = format(new Date(), "yyyy-MM-dd");
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate,   setToDate]   = useState(today);
+
+  // keep toDate >= fromDate automatically
+  const handleFromChange = (val: string) => {
+    setFromDate(val);
+    if (val > toDate) setToDate(val);
+  };
+
+  const isToday = fromDate === today && toDate === today;
 
   const { data: geofences } = useQuery({
     queryKey: ["geofences-all"],
@@ -81,12 +91,12 @@ export default function LocationMonitorPage() {
   });
 
   const { data: raw, refetch, isFetching } = useQuery({
-    queryKey: ["location-monitor-today", today],
+    queryKey: ["location-monitor", fromDate, toDate],
     queryFn: () =>
       api.get<{ data: AttendanceRecord[]; total: number }>(
-        `/attendance/all?limit=2000&startDate=${today}&endDate=${today}`
+        `/attendance/all?limit=2000&startDate=${fromDate}&endDate=${toDate}`
       ).then(r => r.data),
-    refetchInterval: 60_000,
+    refetchInterval: isToday ? 60_000 : false,
   });
 
   useEffect(() => { setLastRefresh(new Date()); }, [raw]);
@@ -131,15 +141,62 @@ export default function LocationMonitorPage() {
               Live attendance check-ins — {format(new Date(), "EEEE, dd MMM yyyy")}
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            {/* Live badge */}
-            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-100">
-              <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
-              </span>
-              <span className="text-[11px] font-bold text-emerald-700">LIVE</span>
+          <div className="flex items-center gap-3 flex-wrap justify-end">
+            {/* Date range */}
+            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+              <Calendar size={13} className="text-gray-400 shrink-0" />
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col">
+                  <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">From</label>
+                  <input
+                    type="date"
+                    value={fromDate}
+                    max={today}
+                    onChange={e => handleFromChange(e.target.value)}
+                    className="text-[12px] font-semibold text-gray-700 bg-transparent outline-none cursor-pointer"
+                  />
+                </div>
+                <span className="text-gray-300 text-xs">→</span>
+                <div className="flex flex-col">
+                  <label className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">To</label>
+                  <input
+                    type="date"
+                    value={toDate}
+                    min={fromDate}
+                    max={today}
+                    onChange={e => setToDate(e.target.value)}
+                    className="text-[12px] font-semibold text-gray-700 bg-transparent outline-none cursor-pointer"
+                  />
+                </div>
+              </div>
+              {!isToday && (
+                <button
+                  onClick={() => { setFromDate(today); setToDate(today); }}
+                  className="ml-1 text-gray-400 hover:text-gray-600"
+                  title="Reset to today"
+                >
+                  <X size={12} />
+                </button>
+              )}
             </div>
+
+            {/* Live badge — only when viewing today */}
+            {isToday ? (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 border border-emerald-100">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span className="text-[11px] font-bold text-emerald-700">LIVE</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gray-50 border border-gray-200">
+                <span className="text-[11px] font-bold text-gray-500">
+                  {fromDate === toDate ? format(new Date(fromDate + "T00:00:00"), "dd MMM yyyy") : `${format(new Date(fromDate + "T00:00:00"), "dd MMM")} – ${format(new Date(toDate + "T00:00:00"), "dd MMM yyyy")}`}
+                </span>
+              </div>
+            )}
+
             <span className="text-[11px] text-gray-400">
               Updated {format(lastRefresh, "hh:mm:ss a")}
             </span>
@@ -362,7 +419,7 @@ export default function LocationMonitorPage() {
           {/* Footer note */}
           <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
             <p className="text-[11px] text-gray-400">
-              Auto-refreshes every 60 seconds · GPS links open in Google Maps
+              {isToday ? "Auto-refreshes every 60 seconds · " : ""}GPS links open in Google Maps
             </p>
             <p className="text-[11px] text-gray-400">
               All times in PKT (UTC+5)
