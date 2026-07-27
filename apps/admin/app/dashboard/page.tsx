@@ -84,13 +84,7 @@ function SectionHeader({ label }: { label: string }) {
 export default function DashboardPage() {
   const { data: session } = useSession();
   const firstName = (session?.user?.name ?? "Admin").split(" ")[0];
-  const [selectedDistrict, setSelectedDistrict] = useState<string>("");
-
-  const { data: districts } = useQuery({
-    queryKey: ["employee-districts"],
-    queryFn: () => api.get<string[]>("/employees/districts").then((r) => r.data),
-    staleTime: 5 * 60_000,
-  });
+  const [selectedZoneId, setSelectedZoneId] = useState<string>("");
 
   const { data: employees } = useQuery({
     queryKey: ["employees-all"],
@@ -98,14 +92,14 @@ export default function DashboardPage() {
   });
   const { data: geofences } = useQuery({
     queryKey: ["geofences-all"],
-    queryFn: () => api.get<unknown[]>("/geofence").then((r) => r.data),
+    queryFn: () => api.get<{ id: string; name: string }[]>("/geofence").then((r) => r.data),
   });
   // Use the statistics endpoint for accurate PKT-based today counts
   const { data: stats } = useQuery({
-    queryKey: ["attendance-stats-today", selectedDistrict],
+    queryKey: ["attendance-stats-today", selectedZoneId],
     queryFn: () => {
-      const url = selectedDistrict
-        ? `/attendance/statistics?district=${encodeURIComponent(selectedDistrict)}`
+      const url = selectedZoneId
+        ? `/attendance/statistics?zoneId=${encodeURIComponent(selectedZoneId)}`
         : "/attendance/statistics";
       return api.get<{ totalCheckIns: number; onTime: number; late: number; absent: number; totalEmployees: number }>(url).then((r) => r.data);
     },
@@ -113,10 +107,10 @@ export default function DashboardPage() {
   });
   // Use the trend endpoint for accurate 7-day chart
   const { data: trendRaw } = useQuery({
-    queryKey: ["attendance-trend-7", selectedDistrict],
+    queryKey: ["attendance-trend-7", selectedZoneId],
     queryFn: () => {
-      const url = selectedDistrict
-        ? `/attendance/trend?days=7&district=${encodeURIComponent(selectedDistrict)}`
+      const url = selectedZoneId
+        ? `/attendance/trend?days=7&zoneId=${encodeURIComponent(selectedZoneId)}`
         : "/attendance/trend?days=7";
       return api.get<{ date: string; total: number; onTime: number; late: number }[]>(url).then((r) => r.data);
     },
@@ -160,11 +154,15 @@ export default function DashboardPage() {
   const recentLeaves = (leaves?.data ?? []).slice(0, 5);
 
   /* KPI card definitions */
+  const selectedZoneName = selectedZoneId
+    ? (geofences?.find((z) => z.id === selectedZoneId)?.name ?? "").replace(/^Punjab Food Authority\s*/i, "").trim()
+    : "";
+
   const kpiCards = [
     {
-      label: selectedDistrict ? `${selectedDistrict} Employees` : "Total Employees",
-      value: selectedDistrict ? (stats?.totalEmployees ?? "—") : (employees?.total ?? "—"),
-      sub: selectedDistrict ? `in ${selectedDistrict}` : "Active workforce",
+      label: selectedZoneId ? `${selectedZoneName} Staff` : "Total Employees",
+      value: selectedZoneId ? (stats?.totalEmployees ?? "—") : (employees?.total ?? "—"),
+      sub: selectedZoneId ? `in ${selectedZoneName}` : "Active workforce",
       icon: Users,
       gradient: "linear-gradient(135deg, #006B3F 0%, #00A651 100%)",
       shadow: "0 10px 30px -6px rgba(0,107,63,0.45)",
@@ -280,9 +278,9 @@ export default function DashboardPage() {
               {/* ── Snapshot Stats */}
               <div className="flex items-center gap-5 sm:gap-8 shrink-0 sm:self-center">
                 {[
-                  { label: "Check-Ins", value: stats?.totalCheckIns ?? 0, sub: selectedDistrict ? selectedDistrict : "today" },
+                  { label: "Check-Ins", value: stats?.totalCheckIns ?? 0, sub: selectedZoneName || "today" },
                   { label: "Leaves", value: leaves?.total ?? 0, sub: "pending" },
-                  { label: "Staff", value: stats?.totalEmployees ?? employees?.total ?? 0, sub: selectedDistrict ? selectedDistrict : "employees" },
+                  { label: "Staff", value: stats?.totalEmployees ?? employees?.total ?? 0, sub: selectedZoneName || "employees" },
                 ].map(({ label, value, sub }, i) => (
                   <React.Fragment key={label}>
                     {i > 0 && <div className="w-px h-14 bg-white/10" />}
@@ -300,18 +298,18 @@ export default function DashboardPage() {
         </div>
 
         {/* ══════════════════════════════════════════
-            DISTRICT FILTER
+            DISTRICT / ZONE FILTER
         ══════════════════════════════════════════ */}
-        {districts && districts.length > 0 && (
+        {geofences && geofences.length > 0 && (
           <div className="flex items-center gap-2 flex-wrap">
             <div className="flex items-center gap-1.5 text-[11px] font-semibold text-gray-400 uppercase tracking-wider shrink-0">
               <MapPin size={11} className="text-[#006B3F]" />
-              District
+              Filter by Zone
             </div>
             <button
-              onClick={() => setSelectedDistrict("")}
+              onClick={() => setSelectedZoneId("")}
               className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-150 border"
-              style={selectedDistrict === "" ? {
+              style={selectedZoneId === "" ? {
                 background: "#006B3F",
                 color: "white",
                 borderColor: "#006B3F",
@@ -322,27 +320,31 @@ export default function DashboardPage() {
                 borderColor: "#E5E7EB",
               }}
             >
-              All Districts
+              All Zones
             </button>
-            {districts.map((d) => (
-              <button
-                key={d}
-                onClick={() => setSelectedDistrict(d === selectedDistrict ? "" : d)}
-                className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-150 border"
-                style={selectedDistrict === d ? {
-                  background: "#006B3F",
-                  color: "white",
-                  borderColor: "#006B3F",
-                  boxShadow: "0 2px 8px rgba(0,107,63,0.35)",
-                } : {
-                  background: "white",
-                  color: "#374151",
-                  borderColor: "#E5E7EB",
-                }}
-              >
-                {d}
-              </button>
-            ))}
+            {geofences.map((zone) => {
+              const label = zone.name.replace(/^Punjab Food Authority\s*/i, "").trim();
+              const active = selectedZoneId === zone.id;
+              return (
+                <button
+                  key={zone.id}
+                  onClick={() => setSelectedZoneId(active ? "" : zone.id)}
+                  className="px-3 py-1.5 rounded-xl text-[12px] font-semibold transition-all duration-150 border"
+                  style={active ? {
+                    background: "#006B3F",
+                    color: "white",
+                    borderColor: "#006B3F",
+                    boxShadow: "0 2px 8px rgba(0,107,63,0.35)",
+                  } : {
+                    background: "white",
+                    color: "#374151",
+                    borderColor: "#E5E7EB",
+                  }}
+                >
+                  {label}
+                </button>
+              );
+            })}
           </div>
         )}
 
