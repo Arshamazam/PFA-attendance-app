@@ -83,6 +83,24 @@ export class LeaveService {
   }
 
   /** All pending requests — for admin panel */
+  async getAllRequests(page = 1, limit = 20, status?: string) {
+    const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = {};
+    if (status) where.status = status;
+    const [requests, total] = await Promise.all([
+      this.prisma.leaveRequest.findMany({
+        where,
+        include: { employee: { select: EMPLOYEE_SELECT } },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.leaveRequest.count({ where }),
+    ]);
+    const data = requests.map((r) => ({ ...r, days: computeDays(r.startDate, r.endDate) }));
+    return { data, total, page, limit };
+  }
+
   async getPendingRequests(page = 1, limit = 20) {
     const skip = (page - 1) * limit;
     const [requests, total] = await Promise.all([

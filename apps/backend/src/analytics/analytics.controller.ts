@@ -35,6 +35,21 @@ export class AnalyticsController {
     return this.analyticsService.getLeaveHistory6Months();
   }
 
+  @Get('summary')
+  getSummary() {
+    return this.analyticsService.getSummary();
+  }
+
+  @Get('monthly-hires-exits')
+  getMonthlyHiresExits(@Query('months') months?: string) {
+    return this.analyticsService.getMonthlyHiresExits(months ? parseInt(months) : 6);
+  }
+
+  @Get('upcoming-birthdays')
+  getUpcomingBirthdays(@Query('days') days?: string) {
+    return this.analyticsService.getUpcomingBirthdays(days ? parseInt(days) : 30);
+  }
+
   @Get('top-present-employees')
   getTopPresentEmployees(
     @Query('month') month?: string,

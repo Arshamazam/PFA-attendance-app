@@ -7,735 +7,631 @@ import api from "@/lib/api";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import {
-  Users, MapPin, CheckCircle2, Calendar, Clock,
-  ArrowLeftRight, UserX, Activity, UserPlus, CalendarCheck, BarChart3,
-  SlidersHorizontal, ChevronDown, X,
+  Users, MapPin, CheckCircle2, Calendar, Clock, UserPlus, TrendingUp, TrendingDown,
+  SlidersHorizontal, ChevronDown, X, Gift, Briefcase, BarChart3, CalendarCheck,
 } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, PieChart, Pie, Cell, Legend,
+  AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import type { Employee, LeaveRequest, AttendanceRecord } from "@/types";
 import { format, parseISO } from "date-fns";
 
-import GenderDistributionPie from "./components/GenderDistributionPie";
-import AgeGenderBarChart from "./components/AgeGenderBarChart";
-import OnLeaveToday from "./components/OnLeaveToday";
-import EmployeesByDepartment from "./components/EmployeesByDepartment";
-import WhatsHappeningPFA from "./components/WhatsHappeningPFA";
-import LeaveHistory6Months from "./components/LeaveHistory6Months";
-import TopEmployees from "./components/TopEmployees";
-import EmployeeTransfers from "./components/EmployeeTransfers";
-import PerformanceGoals from "./components/PerformanceGoals";
+/* ── constants ─────────────────────────────────────────── */
+const G = "#006B3F";
+const PIE_COLORS = [G, "#1565C0", "#E65100", "#6A1B9A", "#2E7D32", "#00838F", "#AD1457", "#F57F17", "#37474F"];
+const AVATAR_COLORS = ["#10B981","#3B82F6","#8B5CF6","#F97316","#14B8A6","#F43F5E","#6366F1"];
 
-/* ──────────────────────────────────────────────────────── helpers */
+function avatarBg(name: string) { return AVATAR_COLORS[(name.charCodeAt(0) ?? 65) % AVATAR_COLORS.length]; }
+function initials(name: string) { return name.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2); }
 
-const PIE_COLORS = ["#006B3F", "#1565C0", "#E65100", "#6A1B9A", "#2E7D32"];
-const AVATAR_COLORS = [
-  "#10B981", "#3B82F6", "#8B5CF6", "#F97316",
-  "#14B8A6", "#F43F5E", "#6366F1",
-];
-
-function getGreeting() {
-  const h = new Date().getHours();
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
+/* ── Gauge ──────────────────────────────────────────────── */
+function AttendanceGauge({ pct }: { pct: number }) {
+  const r = 64, cx = 100, cy = 86;
+  const safe = Math.min(Math.max(pct, 0), 100);
+  const angle = -Math.PI + (safe / 100) * Math.PI;
+  const endX = cx + r * Math.cos(angle);
+  const endY = cy + r * Math.sin(angle);
+  const largeArc = safe > 50 ? 1 : 0;
+  const stroke = safe >= 90 ? "#10B981" : safe >= 75 ? "#F59E0B" : "#EF4444";
+  return (
+    <svg viewBox="0 0 200 106" className="w-full max-w-[210px] mx-auto">
+      <path d={`M ${cx-r},${cy} A ${r},${r} 0 0 1 ${cx+r},${cy}`} stroke="#F1F5F9" strokeWidth="15" fill="none" strokeLinecap="round" />
+      {safe > 1 && (
+        <path d={`M ${cx-r},${cy} A ${r},${r} 0 ${largeArc} 1 ${endX.toFixed(1)},${endY.toFixed(1)}`} stroke={stroke} strokeWidth="15" fill="none" strokeLinecap="round" />
+      )}
+      <text x={cx} y={cy - 6} textAnchor="middle" style={{ fontSize: 22, fontWeight: 800, fill: "#1E293B" }}>{safe.toFixed(1)}%</text>
+      <text x={cx} y={cx + 12} textAnchor="middle" style={{ fontSize: 9, fill: "#94A3B8", fontWeight: 600, letterSpacing: 1 }}>ATTENDANCE RATE</text>
+      <text x={cx-r} y={cy+16} textAnchor="middle" style={{ fontSize: 8, fill: "#CBD5E1" }}>0%</text>
+      <text x={cx+r} y={cy+16} textAnchor="middle" style={{ fontSize: 8, fill: "#CBD5E1" }}>100%</text>
+    </svg>
+  );
 }
 
-function avatarBg(name: string) {
-  return AVATAR_COLORS[(name.charCodeAt(0) ?? 65) % AVATAR_COLORS.length];
-}
-
-function initials(name: string) {
-  return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
-}
-
-function ChartTooltip({ active, payload, label }: {
-  active?: boolean;
-  payload?: Array<{ value: number | string }>;
-  label?: string;
+/* ── KPI Card ───────────────────────────────────────────── */
+function MetricCard({ label, value, sub, trend, trendUp, icon: Icon, iconBg, iconColor }: {
+  label: string; value: string | number; sub?: string;
+  trend?: string; trendUp?: boolean;
+  icon: React.ElementType; iconBg: string; iconColor: string;
 }) {
+  return (
+    <div className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 flex items-center gap-4 hover:shadow-md transition-shadow">
+      <div className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0" style={{ background: iconBg }}>
+        <Icon size={20} style={{ color: iconColor }} />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider truncate">{label}</p>
+        <p className="text-2xl font-black text-gray-800 mt-0.5 tabular-nums leading-none">{value}</p>
+        {(sub || trend) && (
+          <div className="flex items-center gap-2 mt-1 flex-wrap">
+            {trend && (
+              <span className={`flex items-center gap-0.5 text-[11px] font-semibold ${trendUp ? "text-emerald-600" : "text-red-500"}`}>
+                {trendUp ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+                {trend}
+              </span>
+            )}
+            {sub && <span className="text-[11px] text-gray-400">{sub}</span>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Card shell ─────────────────────────────────────────── */
+function DCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+  return <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden ${className}`}>{children}</div>;
+}
+function DCardHead({ title, badge }: { title: string; badge?: string }) {
+  return (
+    <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+      <h3 className="text-sm font-bold text-gray-700">{title}</h3>
+      {badge && <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{badge}</span>}
+    </div>
+  );
+}
+
+/* ── Custom tooltip ─────────────────────────────────────── */
+function ChartTip({ active, payload, label }: { active?: boolean; payload?: Array<{ value: number; name: string; color: string }>; label?: string }) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-white border border-gray-100 shadow-xl rounded-2xl px-4 py-3 pointer-events-none">
-      <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className="text-2xl font-black text-[#006B3F] mt-1 tabular-nums">
-        {payload[0].value}
-      </p>
-      <p className="text-[10px] text-gray-400 -mt-0.5">check-ins</p>
+    <div className="bg-white border border-gray-100 shadow-xl rounded-xl px-3 py-2 text-xs">
+      <p className="font-semibold text-gray-500 mb-1">{label}</p>
+      {payload.map((p, i) => (
+        <p key={i} style={{ color: p.color }} className="font-bold">{p.name}: {p.value}</p>
+      ))}
     </div>
   );
 }
 
-function SectionHeader({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="w-[3px] h-4 rounded-full bg-gradient-to-b from-[#006B3F] to-[#00A651]" />
-      <span className="text-[11px] font-bold text-gray-500 uppercase tracking-[0.14em]">{label}</span>
-      <div className="flex-1 h-px bg-gradient-to-r from-gray-300/50 to-transparent" />
-    </div>
-  );
-}
-
-/* ──────────────────────────────────────────────────────── page */
-
+/* ══════════════════════════════════════════════════════════
+   PAGE
+═══════════════════════════════════════════════════════════ */
 export default function DashboardPage() {
   const { data: session } = useSession();
   const firstName = (session?.user?.name ?? "Admin").split(" ")[0];
-  const [selectedZoneId, setSelectedZoneId] = useState<string>("");
-  const [selectedDepartment, setSelectedDepartment] = useState<string>("");
-  const [trendDays, setTrendDays] = useState<number>(7);
 
+  /* filters */
+  const [selectedZoneId, setSelectedZoneId] = useState("");
+  const [selectedDepartment, setSelectedDepartment] = useState("");
+  const [trendDays, setTrendDays] = useState(7);
+  const filtersActive = !!(selectedZoneId || selectedDepartment || trendDays !== 7);
+
+  /* queries */
   const { data: employees } = useQuery({
     queryKey: ["employees-all"],
-    queryFn: () => api.get<{ data: Employee[]; total: number }>("/employees?limit=1").then((r) => r.data),
+    queryFn: () => api.get<{ data: Employee[]; total: number }>("/employees?limit=1").then(r => r.data),
   });
   const { data: geofences } = useQuery({
     queryKey: ["geofences-all"],
-    queryFn: () => api.get<{ id: string; name: string }[]>("/geofence").then((r) => r.data),
+    queryFn: () => api.get<{ id: string; name: string }[]>("/geofence").then(r => r.data),
   });
   const { data: departments } = useQuery({
     queryKey: ["employee-departments"],
-    queryFn: () => api.get<string[]>("/employees/departments").then((r) => r.data),
+    queryFn: () => api.get<string[]>("/employees/departments").then(r => r.data),
     staleTime: 5 * 60_000,
   });
-  // Use the statistics endpoint for accurate PKT-based today counts
+  const { data: summary } = useQuery({
+    queryKey: ["analytics-summary"],
+    queryFn: () => api.get<{ totalEmployees: number; activeEmployees: number; newHiresThisMonth: number; statusBreakdown: Record<string, number> }>("/analytics/summary").then(r => r.data),
+  });
   const { data: stats } = useQuery({
     queryKey: ["attendance-stats-today", selectedZoneId, selectedDepartment],
     queryFn: () => {
-      const params = new URLSearchParams();
-      if (selectedZoneId) params.set("zoneId", selectedZoneId);
-      if (selectedDepartment) params.set("department", selectedDepartment);
-      const qs = params.toString();
+      const p = new URLSearchParams();
+      if (selectedZoneId) p.set("zoneId", selectedZoneId);
+      if (selectedDepartment) p.set("department", selectedDepartment);
+      const qs = p.toString();
       return api.get<{ totalCheckIns: number; onTime: number; late: number; absent: number; totalEmployees: number }>(
         `/attendance/statistics${qs ? `?${qs}` : ""}`
-      ).then((r) => r.data);
+      ).then(r => r.data);
     },
     refetchInterval: 60_000,
   });
-  // Use the trend endpoint for accurate chart
   const { data: trendRaw } = useQuery({
     queryKey: ["attendance-trend", trendDays, selectedZoneId, selectedDepartment],
     queryFn: () => {
-      const params = new URLSearchParams({ days: String(trendDays) });
-      if (selectedZoneId) params.set("zoneId", selectedZoneId);
-      if (selectedDepartment) params.set("department", selectedDepartment);
-      return api.get<{ date: string; total: number; onTime: number; late: number }[]>(`/attendance/trend?${params}`).then((r) => r.data);
+      const p = new URLSearchParams({ days: String(trendDays) });
+      if (selectedZoneId) p.set("zoneId", selectedZoneId);
+      if (selectedDepartment) p.set("department", selectedDepartment);
+      return api.get<{ date: string; total: number; onTime: number; late: number }[]>(`/attendance/trend?${p}`).then(r => r.data);
     },
-  });
-  // Recent check-ins list only — small fetch, just for display
-  const { data: attendance } = useQuery({
-    queryKey: ["attendance-recent"],
-    queryFn: () => api.get<{ data: AttendanceRecord[]; total: number }>("/attendance/all?limit=10").then((r) => r.data),
   });
   const { data: leaves } = useQuery({
     queryKey: ["leaves-pending"],
-    queryFn: () => api.get<{ data: LeaveRequest[]; total: number }>("/leave/pending?limit=10").then((r) => r.data),
+    queryFn: () => api.get<{ data: LeaveRequest[]; total: number }>("/leave/pending?limit=10").then(r => r.data),
   });
-  const { data: transfers } = useQuery({
-    queryKey: ["transfers-summary"],
-    queryFn: () => api.get<{ data: unknown[]; total: number }>("/employee-transfers?status=Pending").then((r) => r.data),
+  const { data: allLeaves } = useQuery({
+    queryKey: ["leaves-all-summary"],
+    queryFn: () => api.get<{ data: LeaveRequest[]; total: number }>("/leave/all?limit=200").then(r => r.data).catch(() => null),
   });
-  const { data: onLeave } = useQuery({
-    queryKey: ["on-leave-today"],
-    queryFn: () => api.get<{ count: number }>("/analytics/on-leave-today").then((r) => r.data),
+  const { data: deptData } = useQuery({
+    queryKey: ["analytics-dept"],
+    queryFn: () => api.get<{ department: string; count: number; percentage: number }[]>("/analytics/employees-by-department").then(r => r.data),
   });
-  const { data: goals } = useQuery({
-    queryKey: ["goals-at-risk"],
-    queryFn: () => api.get<{ percentage: number; status: string }[]>("/performance-goals").then((r) => r.data),
+  const { data: genderData } = useQuery({
+    queryKey: ["analytics-gender"],
+    queryFn: () => api.get<{ male: number; female: number; other: number; total: number }>("/analytics/gender-count").then(r => r.data),
   });
+  const { data: monthlyHires } = useQuery({
+    queryKey: ["analytics-monthly-hires"],
+    queryFn: () => api.get<{ month: string; newHires: number; exits: number }[]>("/analytics/monthly-hires-exits?months=6").then(r => r.data),
+  });
+  const { data: birthdays } = useQuery({
+    queryKey: ["analytics-birthdays"],
+    queryFn: () => api.get<{ id: string; name: string; department: string; designation: string; date: string; daysUntil: number }[]>("/analytics/upcoming-birthdays?days=30").then(r => r.data),
+  });
+  const { data: attendance } = useQuery({
+    queryKey: ["attendance-recent"],
+    queryFn: () => api.get<{ data: AttendanceRecord[]; total: number }>("/attendance/all?limit=6").then(r => r.data),
+  });
+
+  /* derived */
+  const selectedZoneName = selectedZoneId
+    ? (geofences?.find(z => z.id === selectedZoneId)?.name ?? "").replace(/^Punjab Food Authority\s*/i, "").replace(/^,\s*/, "").trim()
+    : "";
 
   const todayCheckIns = stats?.totalCheckIns ?? 0;
+  const totalEmp = (selectedZoneId || selectedDepartment) ? (stats?.totalEmployees ?? 0) : (employees?.total ?? 0);
+  const avgAttPct = stats && stats.totalEmployees > 0 ? (stats.totalCheckIns / stats.totalEmployees) * 100 : 0;
 
-  const trendData = (trendRaw ?? []).map((r) => ({
-    day: format(new Date(r.date + "T00:00:00"), "EEE"),
-    checkIns: r.total,
+  const trendData = (trendRaw ?? []).map(r => ({
+    day: format(new Date(r.date + "T00:00:00"), trendDays <= 14 ? "EEE dd" : "dd MMM"),
+    checkIns: r.total, onTime: r.onTime, late: r.late,
   }));
 
-  const leaveTypeMap: Record<string, number> = {};
-  leaves?.data?.forEach((l) => {
-    leaveTypeMap[l.leaveType] = (leaveTypeMap[l.leaveType] ?? 0) + 1;
-  });
-  const pieData = Object.entries(leaveTypeMap).map(([name, value]) => ({ name, value }));
+  // trend vs previous day
+  const todayVal = trendRaw?.[trendRaw.length - 1]?.total ?? 0;
+  const yestVal = trendRaw?.[trendRaw.length - 2]?.total ?? 0;
+  const checkInTrend = yestVal > 0 ? `${((todayVal - yestVal) / yestVal * 100).toFixed(0)}% vs yesterday` : undefined;
 
-  const recentCheckIns = (attendance?.data ?? []).slice(0, 5);
-  const recentLeaves = (leaves?.data ?? []).slice(0, 5);
+  // gender donut
+  const genderPie = genderData ? [
+    { name: "Male", value: genderData.male },
+    { name: "Female", value: genderData.female },
+    ...(genderData.other > 0 ? [{ name: "Other", value: genderData.other }] : []),
+  ] : [];
 
-  /* KPI card definitions */
-  const selectedZoneName = selectedZoneId
-    ? (geofences?.find((z) => z.id === selectedZoneId)?.name ?? "")
-        .replace(/^Punjab Food Authority\s*/i, "").replace(/^,\s*/, "").trim()
-    : "";
-  const filtersActive = !!(selectedZoneId || selectedDepartment || trendDays !== 7);
+  // status bars
+  const statusBars = Object.entries(summary?.statusBreakdown ?? {})
+    .filter(([, v]) => v > 0)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  const maxStatus = statusBars[0]?.[1] ?? 1;
 
-  const kpiCards = [
-    {
-      label: (selectedZoneId || selectedDepartment) ? "Filtered Staff" : "Total Employees",
-      value: (selectedZoneId || selectedDepartment) ? (stats?.totalEmployees ?? "—") : (employees?.total ?? "—"),
-      sub: selectedZoneName || selectedDepartment || "Active workforce",
-      icon: Users,
-      gradient: "linear-gradient(135deg, #006B3F 0%, #00A651 100%)",
-      shadow: "0 10px 30px -6px rgba(0,107,63,0.45)",
-    },
-    {
-      label: "Today's Check-Ins",
-      value: todayCheckIns,
-      sub: format(new Date(), "EEEE"),
-      icon: CheckCircle2,
-      gradient: "linear-gradient(135deg, #0A6638 0%, #1A9C55 100%)",
-      shadow: "0 10px 30px -6px rgba(10,102,56,0.45)",
-    },
-    {
-      label: "On Leave Today",
-      value: onLeave?.count ?? "—",
-      sub: "Approved absences",
-      icon: UserX,
-      gradient: "linear-gradient(135deg, #C84B11 0%, #E8650A 100%)",
-      shadow: "0 10px 30px -6px rgba(200,75,17,0.45)",
-    },
-    {
-      label: "Pending Leaves",
-      value: leaves?.total ?? "—",
-      sub: "Awaiting approval",
-      icon: Calendar,
-      gradient: "linear-gradient(135deg, #C45E00 0%, #F07800 100%)",
-      shadow: "0 10px 30px -6px rgba(196,94,0,0.45)",
-    },
-    {
-      label: "Pending Transfers",
-      value: transfers?.total ?? "—",
-      sub: "Under review",
-      icon: ArrowLeftRight,
-      gradient: "linear-gradient(135deg, #0E4FA8 0%, #1976D2 100%)",
-      shadow: "0 10px 30px -6px rgba(14,79,168,0.45)",
-    },
-    {
-      label: "Geofence Zones",
-      value: Array.isArray(geofences) ? geofences.length : "—",
-      sub: "Monitored areas",
-      icon: MapPin,
-      gradient: "linear-gradient(135deg, #550E90 0%, #7B1FB8 100%)",
-      shadow: "0 10px 30px -6px rgba(85,14,144,0.45)",
-    },
-  ];
+  // leave summary
+  const leaveApproved = allLeaves?.data?.filter(l => (l as any).status === "approved").length ?? 0;
+  const leavePending = leaves?.total ?? 0;
+  const leaveRejected = allLeaves?.data?.filter(l => (l as any).status === "rejected").length ?? 0;
+  const leaveTotal = leaveApproved + leavePending + leaveRejected || 1;
 
   return (
     <DashboardLayout title="Dashboard">
-      <div className="space-y-7">
+      <div className="space-y-5">
 
-        {/* ══════════════════════════════════════════
-            HERO BANNER
-        ══════════════════════════════════════════ */}
-        <div
-          className="relative rounded-2xl overflow-hidden shadow-2xl"
-          style={{ background: "linear-gradient(135deg, #001208 0%, #002E1E 45%, #005C38 100%)" }}
-        >
-          {/* dot grid */}
-          <div
-            className="absolute inset-0 opacity-[0.07]"
-            style={{
-              backgroundImage: "radial-gradient(circle, white 1px, transparent 1px)",
-              backgroundSize: "20px 20px",
-            }}
-          />
-          {/* glow orbs */}
-          <div className="absolute top-1/2 right-1/4 -translate-y-1/2 w-80 h-80 rounded-full bg-[#00A651]/15 blur-3xl pointer-events-none" />
-          <div className="absolute -bottom-10 left-1/3 w-48 h-48 rounded-full bg-[#006B3F]/20 blur-2xl pointer-events-none" />
-
-          <div className="relative px-7 py-6">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-6">
-
-              {/* ── Greeting + Quick Actions */}
-              <div>
-                <p className="text-emerald-400/70 text-sm font-medium">{getGreeting()},</p>
-                <h2 className="text-white text-3xl font-black mt-0.5 tracking-tight leading-tight">
-                  {firstName} 👋
-                </h2>
-                <p className="text-white/30 text-sm mt-1.5">
-                  {format(new Date(), "EEEE, MMMM do, yyyy")}
-                </p>
-
-                {/* Quick Actions */}
-                <div className="flex flex-wrap gap-2 mt-5">
-                  {[
-                    { label: "Add Employee", href: "/employees/add", icon: UserPlus, primary: true },
-                    { label: "Review Leaves", href: "/leaves", icon: CalendarCheck },
-                    { label: "Manage Zones", href: "/geofences", icon: MapPin },
-                    { label: "Reports", href: "/reports", icon: BarChart3 },
-                  ].map(({ label, href, icon: Ic, primary }) => (
-                    <Link key={label} href={href}>
-                      <span
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 text-[11px] font-semibold rounded-xl border transition-all duration-150 cursor-pointer hover:-translate-y-0.5"
-                        style={primary ? {
-                          background: "rgba(0,107,63,0.85)",
-                          borderColor: "rgba(0,166,81,0.4)",
-                          color: "white",
-                          boxShadow: "0 4px 14px rgba(0,107,63,0.4)",
-                        } : {
-                          background: "rgba(255,255,255,0.07)",
-                          borderColor: "rgba(255,255,255,0.12)",
-                          color: "rgba(255,255,255,0.7)",
-                        }}
-                      >
-                        <Ic size={11} />
-                        {label}
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              </div>
-
-              {/* ── Snapshot Stats */}
-              <div className="flex items-center gap-5 sm:gap-8 shrink-0 sm:self-center">
-                {[
-                  { label: "Check-Ins", value: stats?.totalCheckIns ?? 0, sub: selectedZoneName || selectedDepartment || "today" },
-                  { label: "Leaves", value: leaves?.total ?? 0, sub: "pending" },
-                  { label: "Staff", value: stats?.totalEmployees ?? employees?.total ?? 0, sub: selectedZoneName || selectedDepartment || "total" },
-                ].map(({ label, value, sub }, i) => (
-                  <React.Fragment key={label}>
-                    {i > 0 && <div className="w-px h-14 bg-white/10" />}
-                    <div className="text-center">
-                      <p className="text-emerald-500/60 text-[9px] font-bold uppercase tracking-[0.18em]">{label}</p>
-                      <p className="text-white text-4xl font-black tabular-nums mt-1 leading-none">{value}</p>
-                      <p className="text-white/25 text-[10px] mt-1">{sub}</p>
-                    </div>
-                  </React.Fragment>
-                ))}
-              </div>
-
-            </div>
+        {/* ── Page Header ────────────────────────────────── */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-black text-gray-800">HR Dashboard</h1>
+            <p className="text-[12px] text-gray-400 mt-0.5">Overview of Workforce & Attendance Metrics</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-[12px] text-gray-400 font-medium">
+              {format(new Date(), "dd MMM yyyy")}
+            </span>
+            <Link href="/reports">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                <BarChart3 size={12} /> Reports
+              </span>
+            </Link>
+            <Link href="/employees/add">
+              <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold text-white transition-colors" style={{ background: G }}>
+                <UserPlus size={12} /> Add Employee
+              </span>
+            </Link>
           </div>
         </div>
 
-        {/* ══════════════════════════════════════════
-            FILTER BAR
-        ══════════════════════════════════════════ */}
+        {/* ── Filter Bar ─────────────────────────────────── */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-5 py-4">
           <div className="flex flex-wrap items-end gap-4">
-
-            {/* Label */}
             <div className="flex items-center gap-1.5 pb-2 shrink-0">
               <SlidersHorizontal size={13} className="text-[#006B3F]" />
-              <span className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">Filters</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Filters</span>
             </div>
 
-            {/* District / Zone */}
-            <div className="flex flex-col gap-1 min-w-[170px]">
-              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">District / Zone</label>
-              <div className="relative">
-                <select
-                  value={selectedZoneId}
-                  onChange={(e) => setSelectedZoneId(e.target.value)}
-                  className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
-                >
-                  <option value="">All Districts</option>
-                  {Array.isArray(geofences) && geofences.map((zone) => {
-                    if (!zone?.id) return null;
-                    const label = (zone.name ?? "")
-                      .replace(/^Punjab Food Authority\s*/i, "")
-                      .replace(/^,\s*/, "").trim() || zone.name;
-                    return <option key={zone.id} value={zone.id}>{label}</option>;
-                  })}
-                </select>
-                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+            {[
+              {
+                label: "District / Zone", value: selectedZoneId, onChange: setSelectedZoneId,
+                options: Array.isArray(geofences) ? geofences.map(z => ({
+                  value: z.id,
+                  label: (z.name ?? "").replace(/^Punjab Food Authority\s*/i, "").replace(/^,\s*/, "").trim() || z.name,
+                })) : [],
+                placeholder: "All Districts",
+              },
+              {
+                label: "Department", value: selectedDepartment, onChange: setSelectedDepartment,
+                options: Array.isArray(departments) ? departments.map(d => ({ value: d, label: d })) : [],
+                placeholder: "All Departments",
+              },
+              {
+                label: "Chart Period", value: String(trendDays), onChange: (v: string) => setTrendDays(Number(v)),
+                options: [{ value: "7", label: "Last 7 Days" }, { value: "14", label: "Last 14 Days" }, { value: "30", label: "Last 30 Days" }, { value: "90", label: "Last 90 Days" }],
+                placeholder: "",
+              },
+            ].map(({ label, value, onChange, options, placeholder }) => (
+              <div key={label} className="flex flex-col gap-1 min-w-[155px]">
+                <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">{label}</label>
+                <div className="relative">
+                  <select
+                    value={value}
+                    onChange={e => onChange(e.target.value)}
+                    className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
+                  >
+                    {placeholder && <option value="">{placeholder}</option>}
+                    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                  <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                </div>
               </div>
-            </div>
+            ))}
 
-            {/* Department */}
-            <div className="flex flex-col gap-1 min-w-[170px]">
-              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Department</label>
-              <div className="relative">
-                <select
-                  value={selectedDepartment}
-                  onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
-                >
-                  <option value="">All Departments</option>
-                  {Array.isArray(departments) && departments.map((dept) => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Chart Period */}
-            <div className="flex flex-col gap-1 min-w-[140px]">
-              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Chart Period</label>
-              <div className="relative">
-                <select
-                  value={trendDays}
-                  onChange={(e) => setTrendDays(Number(e.target.value))}
-                  className="w-full appearance-none bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 pr-8 text-[13px] font-medium text-gray-700 focus:outline-none focus:ring-2 focus:ring-[#006B3F]/20 focus:border-[#006B3F] cursor-pointer"
-                >
-                  <option value={7}>Last 7 Days</option>
-                  <option value={14}>Last 14 Days</option>
-                  <option value={30}>Last 30 Days</option>
-                  <option value={90}>Last 90 Days</option>
-                </select>
-                <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-              </div>
-            </div>
-
-            {/* Reset */}
             {filtersActive && (
               <button
                 onClick={() => { setSelectedZoneId(""); setSelectedDepartment(""); setTrendDays(7); }}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-500 text-[12px] font-semibold hover:bg-red-100 transition-colors border border-red-100 mb-0.5"
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-500 text-[12px] font-semibold hover:bg-red-100 border border-red-100 mb-0.5"
               >
                 <X size={11} /> Clear All
               </button>
             )}
           </div>
 
-          {/* Active filter badges */}
           {filtersActive && (
             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-50">
               <span className="text-[11px] text-gray-400 font-medium self-center">Active:</span>
               {selectedZoneName && (
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-[#006B3F]/10 text-[#006B3F] text-[12px] font-semibold cursor-pointer hover:bg-[#006B3F]/20"
-                  onClick={() => setSelectedZoneId("")}
-                >
-                  <MapPin size={10} /> {selectedZoneName} <X size={9} />
+                <span onClick={() => setSelectedZoneId("")} className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[12px] font-semibold hover:bg-emerald-100">
+                  <MapPin size={9} /> {selectedZoneName} <X size={9} />
                 </span>
               )}
               {selectedDepartment && (
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[12px] font-semibold cursor-pointer hover:bg-blue-100"
-                  onClick={() => setSelectedDepartment("")}
-                >
-                  <Users size={10} /> {selectedDepartment} <X size={9} />
+                <span onClick={() => setSelectedDepartment("")} className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-50 text-blue-600 text-[12px] font-semibold hover:bg-blue-100">
+                  <Briefcase size={9} /> {selectedDepartment} <X size={9} />
                 </span>
               )}
               {trendDays !== 7 && (
-                <span
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-600 text-[12px] font-semibold cursor-pointer hover:bg-purple-100"
-                  onClick={() => setTrendDays(7)}
-                >
-                  <Clock size={10} /> Last {trendDays} days <X size={9} />
+                <span onClick={() => setTrendDays(7)} className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-600 text-[12px] font-semibold hover:bg-purple-100">
+                  <Clock size={9} /> Last {trendDays} days <X size={9} />
                 </span>
               )}
             </div>
           )}
         </div>
 
-        {/* ══════════════════════════════════════════
-            KPI TILES
-        ══════════════════════════════════════════ */}
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          {kpiCards.map(({ label, value, sub, icon: Icon, gradient, shadow }) => (
-            <div
-              key={label}
-              className="rounded-2xl p-5 relative overflow-hidden text-white transition-all duration-200 hover:-translate-y-1 hover:scale-[1.01] cursor-default"
-              style={{ background: gradient, boxShadow: shadow }}
-            >
-              {/* Decorative circles */}
-              <div className="absolute -right-6 -top-6 w-28 h-28 rounded-full bg-white/10 pointer-events-none" />
-              <div className="absolute -right-2 bottom-2 w-16 h-16 rounded-full bg-white/[0.06] pointer-events-none" />
-              <div className="absolute left-3 bottom-0 w-8 h-8 rounded-full bg-white/[0.04] pointer-events-none" />
-
-              <div className="relative flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-white/60 text-[11px] font-semibold uppercase tracking-widest truncate">
-                    {label}
-                  </p>
-                  <p className="text-[2.6rem] font-black mt-2 tabular-nums leading-none tracking-tight">
-                    {value}
-                  </p>
-                  <p className="text-white/50 text-xs mt-2">{sub}</p>
-                </div>
-                <div className="p-3 rounded-xl bg-white/15 backdrop-blur-sm shrink-0">
-                  <Icon size={22} className="text-white" />
-                </div>
-              </div>
-            </div>
-          ))}
+        {/* ── KPI Cards ──────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+          <MetricCard label="Total Employees" value={totalEmp.toLocaleString()} sub="workforce" icon={Users} iconBg="#EFF6FF" iconColor="#1D4ED8" />
+          <MetricCard label="Active Employees" value={(summary?.activeEmployees ?? stats?.totalEmployees ?? "—").toLocaleString()}
+            sub={`${summary && employees?.total ? Math.round(summary.activeEmployees / employees.total * 100) : "—"}% of total`}
+            icon={CheckCircle2} iconBg="#F0FDF4" iconColor="#16A34A" />
+          <MetricCard label="New Hires" value={summary?.newHiresThisMonth ?? "—"} sub="this month"
+            icon={UserPlus} iconBg="#FFF7ED" iconColor="#EA580C" />
+          <MetricCard label="Today's Check-ins" value={todayCheckIns.toLocaleString()}
+            trend={checkInTrend} trendUp={(todayVal - yestVal) >= 0}
+            sub={format(new Date(), "EEE")} icon={CalendarCheck} iconBg="#F0FDF4" iconColor={G} />
+          <MetricCard label="Avg. Attendance" value={`${avgAttPct.toFixed(1)}%`}
+            sub={`${stats?.onTime ?? 0} on time`} icon={BarChart3} iconBg="#FDF4FF" iconColor="#9333EA" />
         </div>
 
-        {/* ══════════════════════════════════════════
-            CHARTS — Trend + Leave Breakdown
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Analytics" />
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-            {/* Area Chart */}
-            <Card className="lg:col-span-2 border-0 shadow-md rounded-2xl bg-white overflow-hidden">
-              <CardHeader className="pb-0 pt-5 px-5 flex flex-row items-center justify-between">
-                <CardTitle className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                  <Activity size={14} className="text-[#006B3F]" />
-                  Attendance — Last {trendDays} Days
-                </CardTitle>
-                <span className="text-[10px] text-gray-400 font-medium bg-gray-100 px-2 py-0.5 rounded-lg">
-                  {trendDays}d view
-                </span>
-              </CardHeader>
-              <CardContent className="px-2 pb-4 pt-3">
-                <ResponsiveContainer width="100%" height={230}>
-                  <AreaChart data={trendData} margin={{ top: 8, right: 16, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#006B3F" stopOpacity={0.25} />
-                        <stop offset="100%" stopColor="#006B3F" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                    <XAxis
-                      dataKey="day"
-                      tick={{ fontSize: 11, fill: "#94A3B8" }}
-                      axisLine={false}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      tick={{ fontSize: 11, fill: "#94A3B8" }}
-                      axisLine={false}
-                      tickLine={false}
-                      allowDecimals={false}
-                    />
-                    <Tooltip content={<ChartTooltip />} cursor={{ stroke: "#E2E8F0", strokeWidth: 1 }} />
-                    <Area
-                      type="monotone"
-                      dataKey="checkIns"
-                      stroke="#006B3F"
-                      strokeWidth={2.5}
-                      fill="url(#areaGrad)"
-                      dot={{ r: 4, fill: "#006B3F", stroke: "#fff", strokeWidth: 2.5 }}
-                      activeDot={{ r: 7, fill: "#fff", stroke: "#006B3F", strokeWidth: 2.5 }}
-                      name="Check-Ins"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+        {/* ── Row 1: Department · Gender · Status ─────────── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-            {/* Leave Donut */}
-            <Card className="border-0 shadow-md rounded-2xl bg-white overflow-hidden">
-              <CardHeader className="pb-0 pt-5 px-5">
-                <CardTitle className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                  <Calendar size={14} className="text-[#006B3F]" />
-                  Leave Breakdown
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="pb-3 pt-1">
-                {pieData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={230}>
+          {/* Employee Overview */}
+          <DCard>
+            <DCardHead title="Employee Overview" badge="by dept" />
+            <div className="px-4 pb-4">
+              {deptData && deptData.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={180}>
                     <PieChart>
-                      <Pie
-                        data={pieData}
-                        cx="50%"
-                        cy="46%"
-                        innerRadius={55}
-                        outerRadius={82}
-                        paddingAngle={4}
-                        dataKey="value"
-                      >
-                        {pieData.map((_, idx) => (
-                          <Cell key={idx} fill={PIE_COLORS[idx % PIE_COLORS.length]} />
-                        ))}
+                      <Pie data={deptData.slice(0, 7)} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={3} dataKey="count" nameKey="department">
+                        {deptData.slice(0, 7).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
                       </Pie>
-                      <Tooltip />
-                      <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 11 }} />
+                      <Tooltip formatter={(v: number, n: string) => [v, n]} />
                     </PieChart>
                   </ResponsiveContainer>
-                ) : (
-                  <div className="h-[230px] flex flex-col items-center justify-center gap-2 text-gray-400">
-                    <Calendar size={28} className="opacity-30" />
-                    <p className="text-sm">No pending leaves</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            DISTRIBUTIONS
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Workforce Breakdown" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-            <GenderDistributionPie />
-            <AgeGenderBarChart />
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            DEPARTMENT + ON LEAVE
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Department Overview" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-            <EmployeesByDepartment />
-            <OnLeaveToday />
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            NOTIFICATIONS
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Activity Feed" />
-          <div className="mt-4">
-            <WhatsHappeningPFA />
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            LEAVE HISTORY
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Leave History" />
-          <div className="mt-4">
-            <LeaveHistory6Months />
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            TOP EMPLOYEES
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Leaderboard" />
-          <div className="mt-4">
-            <TopEmployees />
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════
-            RECENT ACTIVITY
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Recent Activity" />
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
-
-            {/* Recent Check-Ins */}
-            <Card className="border-0 shadow-md rounded-2xl overflow-hidden bg-white">
-              <CardHeader className="pb-2 pt-5 px-5 border-b border-gray-50">
-                <CardTitle className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                  <Clock size={14} className="text-[#006B3F]" />
-                  Recent Check-Ins
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {recentCheckIns.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 gap-2 text-gray-400">
-                    <Clock size={26} className="opacity-30" />
-                    <p className="text-sm">No records yet</p>
-                  </div>
-                ) : (
-                  <div>
-                    {recentCheckIns.map((r, idx) => {
-                      const empName = r.employee?.name ?? "—";
-                      const h = new Date(r.checkInTime).getHours();
-                      const m = new Date(r.checkInTime).getMinutes();
-                      const isLate = h > 9 || (h === 9 && m > 0);
-                      const bg = avatarBg(empName);
-                      return (
-                        <div
-                          key={r.id}
-                          className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-gray-50/80 transition-colors"
-                          style={{ borderBottom: idx < recentCheckIns.length - 1 ? "1px solid #F8FAFC" : "none" }}
-                        >
-                          {/* Left status bar */}
-                          <div
-                            className="w-[3px] h-9 rounded-full shrink-0"
-                            style={{ background: isLate ? "#F97316" : "#10B981" }}
-                          />
-                          {/* Avatar */}
-                          <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-                            style={{ background: bg, boxShadow: `0 3px 8px ${bg}55` }}
-                          >
-                            {initials(empName)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{empName}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {format(parseISO(r.checkInTime), "dd MMM, h:mm a")}
-                            </p>
-                          </div>
-                          <Badge
-                            className={isLate
-                              ? "bg-orange-50 text-orange-600 border-orange-200 text-[11px] font-semibold"
-                              : "bg-emerald-50 text-emerald-700 border-emerald-200 text-[11px] font-semibold"}
-                            variant="outline"
-                          >
-                            {isLate ? "Late" : "On Time"}
-                          </Badge>
+                  <div className="space-y-1.5 mt-1">
+                    {deptData.slice(0, 4).map((d, i) => (
+                      <div key={d.department} className="flex items-center justify-between text-[12px]">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                          <span className="text-gray-600 truncate max-w-[130px]">{d.department}</span>
                         </div>
-                      );
-                    })}
+                        <span className="font-bold text-gray-700 tabular-nums">{d.count} <span className="text-gray-400 font-normal">({d.percentage}%)</span></span>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </>
+              ) : (
+                <div className="h-40 flex items-center justify-center text-gray-300 text-sm">No data</div>
+              )}
+            </div>
+          </DCard>
 
-            {/* Pending Leaves */}
-            <Card className="border-0 shadow-md rounded-2xl overflow-hidden bg-white">
-              <CardHeader className="pb-2 pt-5 px-5 border-b border-gray-50">
-                <CardTitle className="text-sm font-bold text-gray-700 flex items-center gap-2">
-                  <Calendar size={14} className="text-[#006B3F]" />
-                  Pending Leave Requests
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                {recentLeaves.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-10 gap-2 text-gray-400">
-                    <Calendar size={26} className="opacity-30" />
-                    <p className="text-sm">No pending requests</p>
-                  </div>
-                ) : (
-                  <div>
-                    {recentLeaves.map((l, idx) => {
-                      const empName = l.employee?.name ?? "—";
-                      const bg = avatarBg(empName);
-                      return (
-                        <div
-                          key={l.id}
-                          className="flex items-center gap-3.5 px-5 py-3.5 hover:bg-gray-50/80 transition-colors"
-                          style={{ borderBottom: idx < recentLeaves.length - 1 ? "1px solid #F8FAFC" : "none" }}
-                        >
-                          <div className="w-[3px] h-9 rounded-full bg-amber-400 shrink-0" />
-                          <div
-                            className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-                            style={{ background: bg, boxShadow: `0 3px 8px ${bg}55` }}
-                          >
-                            {initials(empName)}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-800 truncate">{empName}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                              {format(parseISO(l.startDate), "dd MMM")} – {format(parseISO(l.endDate), "dd MMM")}
-                              {" · "}
-                              <span className="italic text-gray-400">{l.leaveType}</span>
-                            </p>
-                          </div>
-                          <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[11px] font-semibold" variant="outline">
-                            Pending
-                          </Badge>
+          {/* Gender Diversity */}
+          <DCard>
+            <DCardHead title="Gender Diversity" />
+            <div className="px-4 pb-4">
+              {genderData && genderData.total > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={180}>
+                    <PieChart>
+                      <Pie data={genderPie} cx="50%" cy="50%" innerRadius={48} outerRadius={72} paddingAngle={4} dataKey="value" nameKey="name">
+                        <Cell fill="#3B82F6" />
+                        <Cell fill="#EC4899" />
+                        <Cell fill="#94A3B8" />
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="space-y-2 mt-1">
+                    {genderPie.map((g, i) => (
+                      <div key={g.name} className="flex items-center justify-between text-[12px]">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ background: i === 0 ? "#3B82F6" : i === 1 ? "#EC4899" : "#94A3B8" }} />
+                          <span className="text-gray-600">{g.name}</span>
                         </div>
-                      );
-                    })}
+                        <span className="font-bold text-gray-700 tabular-nums">
+                          {g.value} <span className="text-gray-400 font-normal">({genderData.total > 0 ? Math.round(g.value / genderData.total * 100) : 0}%)</span>
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                </>
+              ) : (
+                <div className="h-40 flex items-center justify-center text-gray-300 text-sm">No data</div>
+              )}
+            </div>
+          </DCard>
 
-          </div>
+          {/* Employee Status */}
+          <DCard>
+            <DCardHead title="Employee Status" />
+            <div className="px-5 pb-5 pt-2">
+              {statusBars.length > 0 ? (
+                <div className="space-y-4 mt-2">
+                  {statusBars.map(([status, count], i) => (
+                    <div key={status}>
+                      <div className="flex items-center justify-between text-[12px] mb-1.5">
+                        <span className="text-gray-600 font-medium">{status}</span>
+                        <span className="font-bold text-gray-800 tabular-nums">{count.toLocaleString()}</span>
+                      </div>
+                      <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${Math.round(count / maxStatus * 100)}%`,
+                            background: i === 0 ? "#10B981" : i === 1 ? "#F59E0B" : i === 2 ? "#6366F1" : i === 3 ? "#EF4444" : "#94A3B8",
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="h-40 flex items-center justify-center text-gray-300 text-sm">No data</div>
+              )}
+            </div>
+          </DCard>
         </div>
 
-        {/* ══════════════════════════════════════════
-            TRANSFERS + GOALS
-        ══════════════════════════════════════════ */}
-        <div>
-          <SectionHeader label="Transfers & Performance" />
-          <div className="space-y-4 mt-4">
-            <EmployeeTransfers />
-            <PerformanceGoals />
-          </div>
+        {/* ── Row 2: Dept Headcount · Monthly Hires · Leave ─ */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Department Headcount */}
+          <DCard>
+            <DCardHead title="Department Headcount" />
+            <div className="pb-3">
+              {deptData && deptData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={deptData.slice(0, 6)} margin={{ top: 8, right: 16, left: -24, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                    <XAxis dataKey="department" tick={{ fontSize: 9, fill: "#94A3B8" }} angle={-35} textAnchor="end" interval={0} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<ChartTip />} />
+                    <Bar dataKey="count" name="Employees" radius={[4, 4, 0, 0]}>
+                      {deptData.slice(0, 6).map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[220px] flex items-center justify-center text-gray-300 text-sm">No data</div>
+              )}
+            </div>
+          </DCard>
+
+          {/* Monthly New Hires vs Exits */}
+          <DCard>
+            <DCardHead title="Monthly New Hires vs Exits" />
+            <div className="pb-3">
+              {monthlyHires && monthlyHires.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <LineChart data={monthlyHires} margin={{ top: 8, right: 16, left: -24, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<ChartTip />} />
+                    <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                    <Line type="monotone" dataKey="newHires" name="New Hires" stroke="#10B981" strokeWidth={2.5} dot={{ r: 4, fill: "#10B981" }} activeDot={{ r: 6 }} />
+                    <Line type="monotone" dataKey="exits" name="Exits" stroke="#EF4444" strokeWidth={2.5} dot={{ r: 4, fill: "#EF4444" }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[220px] flex items-center justify-center text-gray-300 text-sm">No data</div>
+              )}
+            </div>
+          </DCard>
+
+          {/* Leave Summary */}
+          <DCard>
+            <DCardHead title="Leave Summary" />
+            <div className="px-5 pb-5 space-y-3 mt-1">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-gray-50">
+                <div>
+                  <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Total Requests</p>
+                  <p className="text-2xl font-black text-gray-800 tabular-nums">{leaveTotal - 1 || 0}</p>
+                </div>
+                <Calendar size={28} className="text-gray-200" />
+              </div>
+              {[
+                { label: "Approved", value: leaveApproved, pct: Math.round(leaveApproved / leaveTotal * 100), color: "#10B981", bg: "#F0FDF4", text: "#065F46" },
+                { label: "Pending", value: leavePending, pct: Math.round(leavePending / leaveTotal * 100), color: "#F59E0B", bg: "#FFFBEB", text: "#92400E" },
+                { label: "Rejected", value: leaveRejected, pct: Math.round(leaveRejected / leaveTotal * 100), color: "#EF4444", bg: "#FEF2F2", text: "#991B1B" },
+              ].map(({ label, value, pct, color, bg, text }) => (
+                <div key={label} className="flex items-center justify-between p-3 rounded-xl" style={{ background: bg }}>
+                  <div>
+                    <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color }}>{label}</p>
+                    <p className="text-xl font-black tabular-nums" style={{ color: text }}>{value}</p>
+                  </div>
+                  <span className="text-[13px] font-bold" style={{ color }}>{pct}%</span>
+                </div>
+              ))}
+            </div>
+          </DCard>
         </div>
+
+        {/* ── Row 3: Attendance · Trend Chart · Birthdays ─── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Attendance Gauge */}
+          <DCard>
+            <DCardHead title="Attendance Overview" badge="today" />
+            <div className="px-5 pb-5">
+              <AttendanceGauge pct={avgAttPct} />
+              <div className="grid grid-cols-3 gap-2 mt-3">
+                {[
+                  { label: "Present", value: stats?.totalCheckIns ?? 0, color: "#10B981" },
+                  { label: "Late", value: stats?.late ?? 0, color: "#F59E0B" },
+                  { label: "Absent", value: stats?.absent ?? 0, color: "#EF4444" },
+                ].map(({ label, value, color }) => (
+                  <div key={label} className="text-center p-2 rounded-xl bg-gray-50">
+                    <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
+                    <p className="text-lg font-black tabular-nums" style={{ color }}>{value.toLocaleString()}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </DCard>
+
+          {/* Attendance Trend */}
+          <DCard>
+            <DCardHead title={`Attendance — Last ${trendDays} Days`} badge={`${trendDays}d`} />
+            <div className="pb-3">
+              <ResponsiveContainer width="100%" height={220}>
+                <AreaChart data={trendData} margin={{ top: 8, right: 16, left: -24, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={G} stopOpacity={0.2} />
+                      <stop offset="100%" stopColor={G} stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip content={<ChartTip />} />
+                  <Area type="monotone" dataKey="checkIns" name="Check-ins" stroke={G} strokeWidth={2.5} fill="url(#g1)" dot={{ r: 3, fill: G }} activeDot={{ r: 6, fill: "#fff", stroke: G, strokeWidth: 2 }} />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </DCard>
+
+          {/* Upcoming Birthdays */}
+          <DCard>
+            <DCardHead title="Upcoming Birthdays" badge="next 30 days" />
+            <div className="divide-y divide-gray-50">
+              {birthdays && birthdays.length > 0 ? birthdays.slice(0, 5).map(b => {
+                const bg = avatarBg(b.name);
+                return (
+                  <div key={b.id} className="flex items-center gap-3 px-5 py-3 hover:bg-gray-50/70 transition-colors">
+                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+                      style={{ background: bg, boxShadow: `0 2px 6px ${bg}55` }}>
+                      {initials(b.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] font-semibold text-gray-800 truncate">{b.name}</p>
+                      <p className="text-[11px] text-gray-400 truncate">{b.designation || b.department}</p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-[11px] font-bold text-gray-700">{format(new Date(b.date), "dd MMM")}</p>
+                      <p className="text-[10px] text-gray-400">{b.daysUntil === 0 ? "Today 🎂" : `in ${b.daysUntil}d`}</p>
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div className="flex flex-col items-center justify-center py-10 gap-2 text-gray-300">
+                  <Gift size={26} className="opacity-40" />
+                  <p className="text-sm">No upcoming birthdays</p>
+                </div>
+              )}
+            </div>
+          </DCard>
+        </div>
+
+        {/* ── Recent Check-ins ────────────────────────────── */}
+        <DCard>
+          <DCardHead title="Recent Check-ins" badge="live" />
+          <div className="divide-y divide-gray-50">
+            {(attendance?.data ?? []).slice(0, 6).map((r, idx) => {
+              const empName = r.employee?.name ?? "—";
+              const pkt = new Date(new Date(r.checkInTime).getTime() + 5 * 3600000);
+              const h = pkt.getUTCHours(), m = pkt.getUTCMinutes();
+              const isLate = h > 9 || (h === 9 && m > 0);
+              const bg = avatarBg(empName);
+              return (
+                <div key={r.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/70 transition-colors">
+                  <div className="w-1 h-9 rounded-full shrink-0" style={{ background: isLate ? "#F97316" : "#10B981" }} />
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
+                    style={{ background: bg, boxShadow: `0 2px 6px ${bg}55` }}>
+                    {initials(empName)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-semibold text-gray-800 truncate">{empName}</p>
+                    <p className="text-[11px] text-gray-400">{format(parseISO(r.checkInTime), "dd MMM, h:mm a")}</p>
+                  </div>
+                  <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${isLate ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-700"}`}>
+                    {isLate ? "Late" : "On Time"}
+                  </span>
+                </div>
+              );
+            })}
+            {!attendance?.data?.length && (
+              <div className="flex flex-col items-center justify-center py-10 gap-2 text-gray-300">
+                <Clock size={26} className="opacity-40" />
+                <p className="text-sm">No check-ins yet today</p>
+              </div>
+            )}
+          </div>
+        </DCard>
 
       </div>
     </DashboardLayout>

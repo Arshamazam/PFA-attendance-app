@@ -61,6 +61,21 @@ export class LeaveController {
     );
   }
 
+  /** All leave requests — for admin dashboard */
+  @Get('all')
+  @Roles('admin', 'manager', 'super_admin')
+  getAllRequests(
+    @Query('status') status?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.leaveService.getAllRequests(
+      page ? parseInt(page, 10) : 1,
+      limit ? parseInt(limit, 10) : 200,
+      status,
+    );
+  }
+
   /** All pending — for admin panel */
   @Get('pending')
   @Roles('admin', 'manager', 'super_admin')

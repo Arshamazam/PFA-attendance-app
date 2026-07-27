@@ -155,6 +155,64 @@ export class AnalyticsService {
       }));
   }
 
+  async getSummary() {
+    const now = new Date();
+    const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [total, active, newHires, statusRows] = await Promise.all([
+      this.prisma.employee.count({ where: { deletedAt: null } }),
+      this.prisma.employee.count({ where: { deletedAt: null, active: true } }),
+      this.prisma.employee.count({ where: { deletedAt: null, dateOfJoining: { gte: firstOfMonth } } }),
+      this.prisma.employee.groupBy({
+        by: ['employmentStatus'],
+        where: { deletedAt: null },
+        _count: { id: true },
+      }),
+    ]);
+
+    const statusBreakdown: Record<string, number> = {};
+    for (const row of statusRows) {
+      statusBreakdown[row.employmentStatus ?? 'Unknown'] = row._count.id;
+    }
+
+    return { totalEmployees: total, activeEmployees: active, inactiveEmployees: total - active, newHiresThisMonth: newHires, statusBreakdown };
+  }
+
+  async getMonthlyHiresExits(months = 6) {
+    const result: { month: string; newHires: number; exits: number }[] = [];
+    const now = new Date();
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const start = new Date(d.getFullYear(), d.getMonth(), 1);
+      const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59);
+      const [newHires, exits] = await Promise.all([
+        this.prisma.employee.count({ where: { deletedAt: null, dateOfJoining: { gte: start, lte: end } } }),
+        this.prisma.employee.count({ where: { deletedAt: { gte: start, lte: end } } }),
+      ]);
+      result.push({ month: d.toLocaleString('default', { month: 'short', year: '2-digit' }), newHires, exits });
+    }
+    return result;
+  }
+
+  async getUpcomingBirthdays(days = 30) {
+    const employees = await this.prisma.employee.findMany({
+      where: { deletedAt: null, active: true, dateOfBirth: { not: null } },
+      select: { id: true, name: true, dateOfBirth: true, department: true, designation: true },
+    });
+    const today = new Date();
+    const upcoming: { id: string; name: string; department: string; designation: string; date: string; daysUntil: number }[] = [];
+    for (const e of employees) {
+      if (!e.dateOfBirth) continue;
+      const dob = new Date(e.dateOfBirth);
+      const thisYear = new Date(today.getFullYear(), dob.getMonth(), dob.getDate());
+      const diff = Math.floor((thisYear.getTime() - today.getTime()) / 86_400_000);
+      if (diff >= 0 && diff <= days) {
+        upcoming.push({ id: e.id, name: e.name, department: e.department ?? '', designation: e.designation ?? '', date: thisYear.toISOString().split('T')[0], daysUntil: diff });
+      }
+    }
+    return upcoming.sort((a, b) => a.daysUntil - b.daysUntil).slice(0, 8);
+  }
+
   async getTopAbsentEmployees(month?: number, year?: number) {
     const now = new Date();
     const m = month ?? now.getMonth();
