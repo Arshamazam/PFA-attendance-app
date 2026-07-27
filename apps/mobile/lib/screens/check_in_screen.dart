@@ -70,20 +70,18 @@ class _CheckInScreenState extends State<CheckInScreen> {
             ),
           );
         } catch (_) {
-          // GPS timed out or unavailable (common indoors); try last known position first
-          position = await Geolocator.getLastKnownPosition();
-          if (position == null) {
-            try {
-              // Fall back to network/WiFi location — fast and works indoors
-              position = await Geolocator.getCurrentPosition(
-                locationSettings: const LocationSettings(
-                  accuracy: LocationAccuracy.medium,
-                  timeLimit: Duration(seconds: 8),
-                ),
-              );
-            } catch (_) {
-              // Still no fix — position stays null; handled below
-            }
+          // GPS timed out — try medium accuracy (WiFi/cell towers) for a current fix
+          try {
+            position = await Geolocator.getCurrentPosition(
+              locationSettings: const LocationSettings(
+                accuracy: LocationAccuracy.medium,
+                timeLimit: Duration(seconds: 8),
+              ),
+            );
+          } catch (_) {
+            // Medium also failed — last known position as absolute last resort
+            // (may be stale but better than nothing)
+            position = await Geolocator.getLastKnownPosition();
           }
         }
       }

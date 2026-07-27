@@ -87,19 +87,31 @@ export default function DashboardPage() {
 
   const { data: employees } = useQuery({
     queryKey: ["employees-all"],
-    queryFn: () => api.get<{ data: Employee[]; total: number }>("/employees?limit=100").then((r) => r.data),
+    queryFn: () => api.get<{ data: Employee[]; total: number }>("/employees?limit=1").then((r) => r.data),
   });
   const { data: geofences } = useQuery({
     queryKey: ["geofences-all"],
     queryFn: () => api.get<unknown[]>("/geofence").then((r) => r.data),
   });
+  // Use the statistics endpoint for accurate PKT-based today counts
+  const { data: stats } = useQuery({
+    queryKey: ["attendance-stats-today"],
+    queryFn: () => api.get<{ totalCheckIns: number; onTime: number; late: number; absent: number; totalEmployees: number }>("/attendance/statistics").then((r) => r.data),
+    refetchInterval: 60_000,
+  });
+  // Use the trend endpoint for accurate 7-day chart
+  const { data: trendRaw } = useQuery({
+    queryKey: ["attendance-trend-7"],
+    queryFn: () => api.get<{ date: string; total: number; onTime: number; late: number }[]>("/attendance/trend?days=7").then((r) => r.data),
+  });
+  // Recent check-ins list only — small fetch, just for display
   const { data: attendance } = useQuery({
     queryKey: ["attendance-recent"],
-    queryFn: () => api.get<{ data: AttendanceRecord[]; total: number }>("/attendance/all?limit=50").then((r) => r.data),
+    queryFn: () => api.get<{ data: AttendanceRecord[]; total: number }>("/attendance/all?limit=10").then((r) => r.data),
   });
   const { data: leaves } = useQuery({
     queryKey: ["leaves-pending"],
-    queryFn: () => api.get<{ data: LeaveRequest[]; total: number }>("/leave/pending?limit=50").then((r) => r.data),
+    queryFn: () => api.get<{ data: LeaveRequest[]; total: number }>("/leave/pending?limit=10").then((r) => r.data),
   });
   const { data: transfers } = useQuery({
     queryKey: ["transfers-summary"],
@@ -114,20 +126,12 @@ export default function DashboardPage() {
     queryFn: () => api.get<{ percentage: number; status: string }[]>("/performance-goals").then((r) => r.data),
   });
 
-  const today = new Date().toDateString();
-  const todayCheckIns = attendance?.data?.filter(
-    (r) => new Date(r.checkInTime).toDateString() === today
-  ).length ?? 0;
+  const todayCheckIns = stats?.totalCheckIns ?? 0;
 
-  const trendData = Array.from({ length: 7 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() - (6 - i));
-    const dayStr = d.toDateString();
-    const count = attendance?.data?.filter(
-      (r) => new Date(r.checkInTime).toDateString() === dayStr
-    ).length ?? 0;
-    return { day: format(d, "EEE"), checkIns: count };
-  });
+  const trendData = (trendRaw ?? []).map((r) => ({
+    day: format(new Date(r.date + "T00:00:00"), "EEE"),
+    checkIns: r.total,
+  }));
 
   const leaveTypeMap: Record<string, number> = {};
   leaves?.data?.forEach((l) => {
@@ -259,9 +263,9 @@ export default function DashboardPage() {
               {/* ── Snapshot Stats */}
               <div className="flex items-center gap-5 sm:gap-8 shrink-0 sm:self-center">
                 {[
-                  { label: "Check-Ins", value: todayCheckIns, sub: "today" },
+                  { label: "Check-Ins", value: stats?.totalCheckIns ?? 0, sub: "today" },
                   { label: "Leaves", value: leaves?.total ?? 0, sub: "pending" },
-                  { label: "Staff", value: employees?.total ?? 0, sub: "employees" },
+                  { label: "Staff", value: stats?.totalEmployees ?? employees?.total ?? 0, sub: "employees" },
                 ].map(({ label, value, sub }, i) => (
                   <React.Fragment key={label}>
                     {i > 0 && <div className="w-px h-14 bg-white/10" />}
