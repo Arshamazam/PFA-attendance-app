@@ -12,6 +12,12 @@ import {
 
 /* ── helpers ─────────────────────────────────────────────── */
 const G = "#006B3F";
+const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:3000";
+const resolveUrl = (url: string | null | undefined): string | null => {
+  if (!url) return null;
+  if (url.startsWith("http")) return url;
+  return `${BACKEND}${url}`;
+};
 const AVATAR_COLORS = ["#10B981","#3B82F6","#8B5CF6","#F97316","#14B8A6","#F43F5E","#6366F1"];
 const avatarBg  = (n: string) => AVATAR_COLORS[(n.charCodeAt(0) ?? 65) % AVATAR_COLORS.length];
 const initials  = (n: string) => n.split(" ").map(w => w[0]).join("").toUpperCase().slice(0, 2);
@@ -327,13 +333,13 @@ export default function LocationMonitorPage() {
 
                         {/* Photo */}
                         <td className="px-5 py-3.5">
-                          {r.checkInPhotoUrl ? (
+                          {resolveUrl(r.checkInPhotoUrl) ? (
                             <button
-                              onClick={() => setPhotoModal({ url: r.checkInPhotoUrl!, name })}
+                              onClick={() => setPhotoModal({ url: resolveUrl(r.checkInPhotoUrl)!, name })}
                               className="w-9 h-9 rounded-lg overflow-hidden border border-gray-200 hover:border-emerald-400 transition-colors relative group"
                             >
                               <img
-                                src={r.checkInPhotoUrl}
+                                src={resolveUrl(r.checkInPhotoUrl)!}
                                 alt={name}
                                 className="w-full h-full object-cover"
                               />
