@@ -15,7 +15,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import type { Employee, LeaveRequest, AttendanceRecord } from "@/types";
-import { format, parseISO } from "date-fns";
+import { format, parseISO, differenceInDays } from "date-fns";
 
 /* ── constants ─────────────────────────────────────────── */
 const G = "#006B3F";
@@ -114,8 +114,21 @@ export default function DashboardPage() {
   /* filters */
   const [selectedZoneId, setSelectedZoneId] = useState("");
   const [selectedDepartment, setSelectedDepartment] = useState("");
-  const [trendDays, setTrendDays] = useState(7);
-  const filtersActive = !!(selectedZoneId || selectedDepartment || trendDays !== 7);
+
+  const today = format(new Date(), "yyyy-MM-dd");
+  const [fromDate, setFromDate] = useState(today);
+  const [toDate,   setToDate]   = useState(today);
+
+  const handleFromChange = (val: string) => {
+    setFromDate(val);
+    if (val > toDate) setToDate(val);
+  };
+
+  const isToday = fromDate === today && toDate === today;
+  // derive trend days from date range (min 1, max 90)
+  const trendDays = Math.min(90, Math.max(1, differenceInDays(new Date(toDate + "T00:00:00"), new Date(fromDate + "T00:00:00")) + 1));
+
+  const filtersActive = !!(selectedZoneId || selectedDepartment || !isToday);
 
   /* queries */
   const { data: employees } = useQuery({
@@ -136,9 +149,10 @@ export default function DashboardPage() {
     queryFn: () => api.get<{ totalEmployees: number; activeEmployees: number; newHiresThisMonth: number; statusBreakdown: Record<string, number> }>("/analytics/summary").then(r => r.data),
   });
   const { data: stats } = useQuery({
-    queryKey: ["attendance-stats-today", selectedZoneId, selectedDepartment],
+    queryKey: ["attendance-stats", fromDate, selectedZoneId, selectedDepartment],
     queryFn: () => {
       const p = new URLSearchParams();
+      if (!isToday) p.set("date", fromDate);
       if (selectedZoneId) p.set("zoneId", selectedZoneId);
       if (selectedDepartment) p.set("department", selectedDepartment);
       const qs = p.toString();
@@ -146,10 +160,10 @@ export default function DashboardPage() {
         `/attendance/statistics${qs ? `?${qs}` : ""}`
       ).then(r => r.data);
     },
-    refetchInterval: 60_000,
+    refetchInterval: isToday ? 60_000 : false,
   });
   const { data: trendRaw } = useQuery({
-    queryKey: ["attendance-trend", trendDays, selectedZoneId, selectedDepartment],
+    queryKey: ["attendance-trend", fromDate, toDate, trendDays, selectedZoneId, selectedDepartment],
     queryFn: () => {
       const p = new URLSearchParams({ days: String(trendDays) });
       if (selectedZoneId) p.set("zoneId", selectedZoneId);
@@ -260,6 +274,7 @@ export default function DashboardPage() {
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Filters</span>
             </div>
 
+            {/* District / Zone */}
             {[
               {
                 label: "District / Zone", value: selectedZoneId, onChange: setSelectedZoneId,
@@ -273,11 +288,6 @@ export default function DashboardPage() {
                 label: "Department", value: selectedDepartment, onChange: setSelectedDepartment,
                 options: Array.isArray(departments) ? departments.map(d => ({ value: d, label: d })) : [],
                 placeholder: "All Departments",
-              },
-              {
-                label: "Chart Period", value: String(trendDays), onChange: (v: string) => setTrendDays(Number(v)),
-                options: [{ value: "7", label: "Last 7 Days" }, { value: "14", label: "Last 14 Days" }, { value: "30", label: "Last 30 Days" }, { value: "90", label: "Last 90 Days" }],
-                placeholder: "",
               },
             ].map(({ label, value, onChange, options, placeholder }) => (
               <div key={label} className="flex flex-col gap-1 min-w-[155px]">
@@ -296,9 +306,46 @@ export default function DashboardPage() {
               </div>
             ))}
 
+            {/* Date range picker */}
+            <div className="flex flex-col gap-1">
+              <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Date Range</label>
+              <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                <Calendar size={13} className="text-gray-400 shrink-0" />
+                <div className="flex items-center gap-2">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">From</span>
+                    <input
+                      type="date"
+                      value={fromDate}
+                      max={today}
+                      onChange={e => handleFromChange(e.target.value)}
+                      className="text-[12px] font-semibold text-gray-700 bg-transparent outline-none cursor-pointer"
+                    />
+                  </div>
+                  <span className="text-gray-300 text-xs">→</span>
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-gray-400 uppercase tracking-wide">To</span>
+                    <input
+                      type="date"
+                      value={toDate}
+                      min={fromDate}
+                      max={today}
+                      onChange={e => setToDate(e.target.value)}
+                      className="text-[12px] font-semibold text-gray-700 bg-transparent outline-none cursor-pointer"
+                    />
+                  </div>
+                </div>
+                {!isToday && (
+                  <button onClick={() => { setFromDate(today); setToDate(today); }} className="ml-1 text-gray-400 hover:text-red-400" title="Reset to today">
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+            </div>
+
             {filtersActive && (
               <button
-                onClick={() => { setSelectedZoneId(""); setSelectedDepartment(""); setTrendDays(7); }}
+                onClick={() => { setSelectedZoneId(""); setSelectedDepartment(""); setFromDate(today); setToDate(today); }}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-red-50 text-red-500 text-[12px] font-semibold hover:bg-red-100 border border-red-100 mb-0.5"
               >
                 <X size={11} /> Clear All
@@ -319,9 +366,11 @@ export default function DashboardPage() {
                   <Briefcase size={9} /> {selectedDepartment} <X size={9} />
                 </span>
               )}
-              {trendDays !== 7 && (
-                <span onClick={() => setTrendDays(7)} className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-600 text-[12px] font-semibold hover:bg-purple-100">
-                  <Clock size={9} /> Last {trendDays} days <X size={9} />
+              {!isToday && (
+                <span onClick={() => { setFromDate(today); setToDate(today); }} className="cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-purple-50 text-purple-600 text-[12px] font-semibold hover:bg-purple-100">
+                  <Calendar size={9} />
+                  {fromDate === toDate ? format(new Date(fromDate + "T00:00:00"), "dd MMM yyyy") : `${format(new Date(fromDate + "T00:00:00"), "dd MMM")} – ${format(new Date(toDate + "T00:00:00"), "dd MMM yyyy")}`}
+                  <X size={9} />
                 </span>
               )}
             </div>
@@ -525,7 +574,7 @@ export default function DashboardPage() {
 
           {/* Attendance Gauge */}
           <DCard>
-            <DCardHead title="Attendance Overview" badge="today" />
+            <DCardHead title="Attendance Overview" badge={isToday ? "today" : format(new Date(fromDate + "T00:00:00"), "dd MMM")} />
             <div className="px-5 pb-5">
               <AttendanceGauge pct={avgAttPct} />
               <div className="grid grid-cols-3 gap-2 mt-3">
