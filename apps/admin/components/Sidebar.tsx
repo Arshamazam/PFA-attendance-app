@@ -18,6 +18,7 @@ import {
   ExternalLink,
   Star,
   CalendarDays,
+  MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,6 +32,7 @@ const navItems: { href: string; label: string; icon: React.ElementType; disabled
   { href: "/employee-categories", label: "Leave Categories",    icon: CalendarDays },
   { href: "/announcements",       label: "Announcements",      icon: Megaphone },
   { href: "/reports",             label: "Reports",            icon: BarChart3 },
+  { href: "/location-monitor",   label: "Location Monitor",   icon: MapPin },
 ];
 
 export default function Sidebar() {
