@@ -58,6 +58,11 @@ export class AttendanceService {
   }
 
   async checkIn(employeeId: string, dto: CheckInDto) {
+    // A verified selfie photo is mandatory — reject API calls that skip the upload step
+    if (!dto.photoUrl) {
+      throw new BadRequestException('A selfie photo is required to check in.');
+    }
+
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
       select: { geofenceZoneIds: true, requiresGeofence: true },
