@@ -9,9 +9,10 @@ import Link from "next/link";
 import {
   Users, MapPin, CheckCircle2, Calendar, Clock, UserPlus, TrendingUp, TrendingDown,
   SlidersHorizontal, ChevronDown, X, Gift, Briefcase, BarChart3, CalendarCheck,
+  ArrowRight,
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
+  BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
 import type { Employee, LeaveRequest, AttendanceRecord } from "@/types";
@@ -19,6 +20,7 @@ import { format, parseISO, differenceInDays } from "date-fns";
 
 /* ── constants ─────────────────────────────────────────── */
 const G = "#006B3F";
+const BACKEND_URL = "http://187.127.125.215:3000";
 const PIE_COLORS = [G, "#1565C0", "#E65100", "#6A1B9A", "#2E7D32", "#00838F", "#AD1457", "#F57F17", "#37474F"];
 const AVATAR_COLORS = ["#10B981","#3B82F6","#8B5CF6","#F97316","#14B8A6","#F43F5E","#6366F1"];
 
@@ -82,11 +84,14 @@ function MetricCard({ label, value, sub, trend, trendUp, icon: Icon, iconBg, ico
 function DCard({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return <div className={`bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden ${className}`}>{children}</div>;
 }
-function DCardHead({ title, badge }: { title: string; badge?: string }) {
+function DCardHead({ title, badge, action }: { title: string; badge?: string; action?: React.ReactNode }) {
   return (
     <div className="px-5 pt-5 pb-3 flex items-center justify-between">
       <h3 className="text-sm font-bold text-gray-700">{title}</h3>
-      {badge && <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{badge}</span>}
+      <div className="flex items-center gap-2">
+        {badge && <span className="text-[10px] font-semibold text-gray-400 bg-gray-100 px-2 py-0.5 rounded-lg">{badge}</span>}
+        {action}
+      </div>
     </div>
   );
 }
@@ -125,7 +130,6 @@ export default function DashboardPage() {
   };
 
   const isToday = fromDate === today && toDate === today;
-  // derive trend days from date range (min 1, max 90)
   const trendDays = Math.min(90, Math.max(1, differenceInDays(new Date(toDate + "T00:00:00"), new Date(fromDate + "T00:00:00")) + 1));
 
   const filtersActive = !!(selectedZoneId || selectedDepartment || !isToday);
@@ -156,9 +160,10 @@ export default function DashboardPage() {
       if (selectedZoneId) p.set("zoneId", selectedZoneId);
       if (selectedDepartment) p.set("department", selectedDepartment);
       const qs = p.toString();
-      return api.get<{ totalCheckIns: number; onTime: number; late: number; absent: number; totalEmployees: number }>(
-        `/attendance/statistics${qs ? `?${qs}` : ""}`
-      ).then(r => r.data);
+      return api.get<{
+        totalCheckIns: number; onTime: number; late: number; absent: number; totalEmployees: number;
+        byDepartment: { dept: string; onTime: number; late: number }[];
+      }>(`/attendance/statistics${qs ? `?${qs}` : ""}`).then(r => r.data);
     },
     refetchInterval: isToday ? 60_000 : false,
   });
@@ -197,7 +202,8 @@ export default function DashboardPage() {
   });
   const { data: attendance } = useQuery({
     queryKey: ["attendance-recent"],
-    queryFn: () => api.get<{ data: AttendanceRecord[]; total: number }>("/attendance/all?limit=6").then(r => r.data),
+    queryFn: () => api.get<{ data: AttendanceRecord[]; total: number }>("/attendance/all?limit=8").then(r => r.data),
+    refetchInterval: 60_000,
   });
 
   /* derived */
@@ -211,33 +217,34 @@ export default function DashboardPage() {
 
   const trendData = (trendRaw ?? []).map(r => ({
     day: format(new Date(r.date + "T00:00:00"), trendDays <= 14 ? "EEE dd" : "dd MMM"),
-    checkIns: r.total, onTime: r.onTime, late: r.late,
+    onTime: r.onTime, late: r.late, total: r.total,
   }));
 
-  // trend vs previous day
   const todayVal = trendRaw?.[trendRaw.length - 1]?.total ?? 0;
-  const yestVal = trendRaw?.[trendRaw.length - 2]?.total ?? 0;
+  const yestVal  = trendRaw?.[trendRaw.length - 2]?.total ?? 0;
   const checkInTrend = yestVal > 0 ? `${((todayVal - yestVal) / yestVal * 100).toFixed(0)}% vs yesterday` : undefined;
 
-  // gender donut
   const genderPie = genderData ? [
-    { name: "Male", value: genderData.male },
+    { name: "Male",   value: genderData.male   },
     { name: "Female", value: genderData.female },
     ...(genderData.other > 0 ? [{ name: "Other", value: genderData.other }] : []),
   ] : [];
 
-  // status bars
   const statusBars = Object.entries(summary?.statusBreakdown ?? {})
     .filter(([, v]) => v > 0)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 5);
   const maxStatus = statusBars[0]?.[1] ?? 1;
 
-  // leave summary
   const leaveApproved = allLeaves?.data?.filter(l => (l as any).status === "approved").length ?? 0;
-  const leavePending = leaves?.total ?? 0;
+  const leavePending  = leaves?.total ?? 0;
   const leaveRejected = allLeaves?.data?.filter(l => (l as any).status === "rejected").length ?? 0;
-  const leaveTotal = leaveApproved + leavePending + leaveRejected || 1;
+  const leaveTotal    = leaveApproved + leavePending + leaveRejected || 1;
+
+  const deptAttendance = (stats?.byDepartment ?? [])
+    .filter(d => d.onTime + d.late > 0)
+    .sort((a, b) => (b.onTime + b.late) - (a.onTime + a.late))
+    .slice(0, 6);
 
   return (
     <DashboardLayout title="Dashboard">
@@ -247,11 +254,11 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-black text-gray-800">HR Dashboard</h1>
-            <p className="text-[12px] text-gray-400 mt-0.5">Overview of Workforce & Attendance Metrics</p>
+            <p className="text-[12px] text-gray-400 mt-0.5">Welcome back, {firstName} — here&apos;s your workforce overview</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[12px] text-gray-400 font-medium">
-              {format(new Date(), "dd MMM yyyy")}
+              {format(new Date(), "EEEE, dd MMM yyyy")}
             </span>
             <Link href="/reports">
               <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[12px] font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
@@ -274,7 +281,6 @@ export default function DashboardPage() {
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Filters</span>
             </div>
 
-            {/* District / Zone */}
             {[
               {
                 label: "District / Zone", value: selectedZoneId, onChange: setSelectedZoneId,
@@ -306,7 +312,6 @@ export default function DashboardPage() {
               </div>
             ))}
 
-            {/* Date range picker */}
             <div className="flex flex-col gap-1">
               <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1">Date Range</label>
               <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
@@ -388,8 +393,9 @@ export default function DashboardPage() {
           <MetricCard label="Today's Check-ins" value={todayCheckIns.toLocaleString()}
             trend={checkInTrend} trendUp={(todayVal - yestVal) >= 0}
             sub={format(new Date(), "EEE")} icon={CalendarCheck} iconBg="#F0FDF4" iconColor={G} />
-          <MetricCard label="Avg. Attendance" value={`${avgAttPct.toFixed(1)}%`}
-            sub={`${stats?.onTime ?? 0} on time`} icon={BarChart3} iconBg="#FDF4FF" iconColor="#9333EA" />
+          <MetricCard label="Late Today" value={(stats?.late ?? "—").toLocaleString()}
+            sub={stats ? `${stats.onTime} on time` : "loading"}
+            icon={BarChart3} iconBg="#FFF7ED" iconColor="#EA580C" />
         </div>
 
         {/* ── Row 1: Department · Gender · Status ─────────── */}
@@ -554,7 +560,7 @@ export default function DashboardPage() {
               </div>
               {[
                 { label: "Approved", value: leaveApproved, pct: Math.round(leaveApproved / leaveTotal * 100), color: "#10B981", bg: "#F0FDF4", text: "#065F46" },
-                { label: "Pending", value: leavePending, pct: Math.round(leavePending / leaveTotal * 100), color: "#F59E0B", bg: "#FFFBEB", text: "#92400E" },
+                { label: "Pending",  value: leavePending,  pct: Math.round(leavePending  / leaveTotal * 100), color: "#F59E0B", bg: "#FFFBEB", text: "#92400E" },
                 { label: "Rejected", value: leaveRejected, pct: Math.round(leaveRejected / leaveTotal * 100), color: "#EF4444", bg: "#FEF2F2", text: "#991B1B" },
               ].map(({ label, value, pct, color, bg, text }) => (
                 <div key={label} className="flex items-center justify-between p-3 rounded-xl" style={{ background: bg }}>
@@ -569,7 +575,7 @@ export default function DashboardPage() {
           </DCard>
         </div>
 
-        {/* ── Row 3: Attendance · Trend Chart · Birthdays ─── */}
+        {/* ── Row 3: Gauge · On-Time vs Late Trend · Department Punctuality ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* Attendance Gauge */}
@@ -580,8 +586,8 @@ export default function DashboardPage() {
               <div className="grid grid-cols-3 gap-2 mt-3">
                 {[
                   { label: "Present", value: stats?.totalCheckIns ?? 0, color: "#10B981" },
-                  { label: "Late", value: stats?.late ?? 0, color: "#F59E0B" },
-                  { label: "Absent", value: stats?.absent ?? 0, color: "#EF4444" },
+                  { label: "Late",    value: stats?.late ?? 0,          color: "#F97316" },
+                  { label: "Absent",  value: stats?.absent ?? 0,        color: "#EF4444" },
                 ].map(({ label, value, color }) => (
                   <div key={label} className="text-center p-2 rounded-xl bg-gray-50">
                     <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">{label}</p>
@@ -592,25 +598,138 @@ export default function DashboardPage() {
             </div>
           </DCard>
 
-          {/* Attendance Trend */}
+          {/* On-Time vs Late Trend — stacked bar */}
           <DCard>
-            <DCardHead title={`Attendance — Last ${trendDays} Days`} badge={`${trendDays}d`} />
+            <DCardHead title={`On Time vs Late — Last ${trendDays} Days`} badge={`${trendDays}d`} />
             <div className="pb-3">
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={trendData} margin={{ top: 8, right: 16, left: -24, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor={G} stopOpacity={0.2} />
-                      <stop offset="100%" stopColor={G} stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
-                  <Tooltip content={<ChartTip />} />
-                  <Area type="monotone" dataKey="checkIns" name="Check-ins" stroke={G} strokeWidth={2.5} fill="url(#g1)" dot={{ r: 3, fill: G }} activeDot={{ r: 6, fill: "#fff", stroke: G, strokeWidth: 2 }} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {trendData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={trendData} margin={{ top: 8, right: 16, left: -24, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#F1F5F9" />
+                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                    <Tooltip content={<ChartTip />} />
+                    <Legend iconSize={8} iconType="circle" wrapperStyle={{ fontSize: 11, paddingTop: 4 }} />
+                    <Bar dataKey="onTime" name="On Time" stackId="a" fill="#10B981" radius={[0, 0, 0, 0]} />
+                    <Bar dataKey="late"   name="Late"    stackId="a" fill="#F97316" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[220px] flex items-center justify-center text-gray-300 text-sm">No data</div>
+              )}
+            </div>
+          </DCard>
+
+          {/* Department Punctuality */}
+          <DCard>
+            <DCardHead
+              title="Department Punctuality"
+              badge={isToday ? "today" : format(new Date(fromDate + "T00:00:00"), "dd MMM")}
+            />
+            <div className="px-5 pb-5 space-y-4 mt-1">
+              {deptAttendance.length > 0 ? deptAttendance.map(d => {
+                const total = d.onTime + d.late;
+                const pct = Math.round(d.onTime / total * 100);
+                const textColor = pct >= 80 ? "#10B981" : pct >= 60 ? "#F59E0B" : "#EF4444";
+                return (
+                  <div key={d.dept}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[12px] text-gray-600 font-medium truncate max-w-[150px]">{d.dept}</span>
+                      <span className="text-[11px] font-bold tabular-nums" style={{ color: textColor }}>{pct}%</span>
+                    </div>
+                    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden flex">
+                      <div style={{ width: `${pct}%`, background: "#10B981" }} className="h-full transition-all duration-700" />
+                      <div style={{ width: `${100 - pct}%`, background: "#F97316" }} className="h-full transition-all duration-700" />
+                    </div>
+                    <div className="flex justify-between text-[10px] mt-0.5">
+                      <span className="text-emerald-600 font-medium">{d.onTime} on time</span>
+                      <span className="text-orange-500 font-medium">{d.late} late</span>
+                    </div>
+                  </div>
+                );
+              }) : (
+                <div className="h-40 flex flex-col items-center justify-center text-gray-300 gap-2">
+                  <BarChart3 size={22} className="opacity-40" />
+                  <p className="text-sm">No check-in data for selected period</p>
+                </div>
+              )}
+            </div>
+          </DCard>
+        </div>
+
+        {/* ── Row 4: Pending Leave Requests · Upcoming Birthdays ─ */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+
+          {/* Pending Leave Requests — 2/3 width */}
+          <DCard className="lg:col-span-2">
+            <DCardHead
+              title="Pending Leave Requests"
+              badge={leavePending > 0 ? `${leavePending} pending` : undefined}
+              action={
+                <Link href="/leave">
+                  <span className="flex items-center gap-1 text-[11px] font-semibold text-[#006B3F] hover:underline">
+                    View all <ArrowRight size={10} />
+                  </span>
+                </Link>
+              }
+            />
+            <div className="overflow-x-auto">
+              {(leaves?.data ?? []).length > 0 ? (
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-50">
+                      {["Employee", "Type", "Duration", "Reason", ""].map(h => (
+                        <th key={h} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider px-4 py-2.5 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(leaves?.data ?? []).slice(0, 7).map(l => {
+                      const la = l as any;
+                      const empName = la.employee?.name ?? "—";
+                      const start = la.startDate ? parseISO(la.startDate) : null;
+                      const end   = la.endDate   ? parseISO(la.endDate)   : null;
+                      const days  = start && end  ? differenceInDays(end, start) + 1 : null;
+                      return (
+                        <tr key={l.id} className="border-b border-gray-50 hover:bg-gray-50/60 transition-colors">
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                                style={{ background: avatarBg(empName) }}>
+                                {initials(empName)}
+                              </div>
+                              <span className="text-[13px] font-semibold text-gray-800 truncate max-w-[130px]">{empName}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 whitespace-nowrap">
+                              {la.leaveType ?? "Leave"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-gray-500 whitespace-nowrap">
+                            {start && end ? (
+                              <>{format(start, "dd MMM")} → {format(end, "dd MMM")} <span className="font-semibold text-gray-700">({days}d)</span></>
+                            ) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-[12px] text-gray-500">
+                            <span className="block truncate max-w-[180px]">{la.reason ?? "—"}</span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <Link href="/leave">
+                              <span className="text-[11px] font-semibold text-[#006B3F] hover:underline whitespace-nowrap">Review</span>
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-300">
+                  <CheckCircle2 size={24} className="opacity-40" />
+                  <p className="text-sm">No pending leave requests</p>
+                </div>
+              )}
             </div>
           </DCard>
 
@@ -648,24 +767,49 @@ export default function DashboardPage() {
 
         {/* ── Recent Check-ins ────────────────────────────── */}
         <DCard>
-          <DCardHead title="Recent Check-ins" badge="live" />
+          <DCardHead
+            title="Recent Check-ins"
+            badge="live"
+            action={
+              <Link href="/reports">
+                <span className="flex items-center gap-1 text-[11px] font-semibold text-[#006B3F] hover:underline">
+                  View all <ArrowRight size={10} />
+                </span>
+              </Link>
+            }
+          />
           <div className="divide-y divide-gray-50">
-            {(attendance?.data ?? []).slice(0, 6).map((r, idx) => {
+            {(attendance?.data ?? []).slice(0, 8).map((r) => {
               const empName = r.employee?.name ?? "—";
               const pkt = new Date(new Date(r.checkInTime).getTime() + 5 * 3600000);
               const h = pkt.getUTCHours(), m = pkt.getUTCMinutes();
               const isLate = h > 9 || (h === 9 && m > 0);
               const bg = avatarBg(empName);
+              const photoUrl = (r as any).checkInPhotoUrl
+                ? `${BACKEND_URL}${(r as any).checkInPhotoUrl}`
+                : null;
               return (
                 <div key={r.id} className="flex items-center gap-4 px-5 py-3.5 hover:bg-gray-50/70 transition-colors">
-                  <div className="w-1 h-9 rounded-full shrink-0" style={{ background: isLate ? "#F97316" : "#10B981" }} />
-                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-[11px] font-bold shrink-0"
-                    style={{ background: bg, boxShadow: `0 2px 6px ${bg}55` }}>
-                    {initials(empName)}
+                  <div className="w-1 h-10 rounded-full shrink-0" style={{ background: isLate ? "#F97316" : "#10B981" }} />
+                  <div className="w-10 h-10 rounded-full overflow-hidden shrink-0 relative flex items-center justify-center"
+                    style={{ background: bg, boxShadow: `0 2px 8px ${bg}55` }}>
+                    <span className="text-white text-[11px] font-bold absolute select-none">{initials(empName)}</span>
+                    {photoUrl && (
+                      <img
+                        src={photoUrl}
+                        alt=""
+                        className="w-full h-full object-cover absolute inset-0 z-10"
+                        onError={e => { (e.target as HTMLImageElement).style.opacity = "0"; }}
+                      />
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-semibold text-gray-800 truncate">{empName}</p>
-                    <p className="text-[11px] text-gray-400">{format(parseISO(r.checkInTime), "dd MMM, h:mm a")}</p>
+                    <p className="text-[11px] text-gray-400 truncate">{(r.employee as any)?.email ?? ""}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="text-[13px] font-semibold text-gray-700 tabular-nums">{format(parseISO(r.checkInTime), "h:mm a")}</p>
+                    <p className="text-[10px] text-gray-400">{format(parseISO(r.checkInTime), "dd MMM")}</p>
                   </div>
                   <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${isLate ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-700"}`}>
                     {isLate ? "Late" : "On Time"}
