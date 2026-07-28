@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:camera/camera.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -214,20 +213,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
-  Future<bool> _detectFaceInPhoto(String imagePath) async {
-    final detector = FaceDetector(
-      options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate),
-    );
-    try {
-      final faces = await detector.processImage(InputImage.fromFilePath(imagePath));
-      return faces.isNotEmpty;
-    } catch (_) {
-      return false; // block on error — do not allow unverified photos
-    } finally {
-      await detector.close();
-    }
-  }
-
   Future<void> _handleCheckOut() async {
     // ── 3-hour minimum guard ──────────────────────────────────────────────────
     final checkInTime = context.read<AttendanceProvider>().openCheckInTime;
@@ -288,34 +273,6 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     } catch (_) {
       // Camera unavailable — proceed without photo
-    }
-
-    // ── Face detection on check-out photo ─────────────────────────────────────
-    if (photoPath != null && mounted) {
-      final hasFace = await _detectFaceInPhoto(photoPath);
-      if (!mounted) return;
-      if (!hasFace) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.face_retouching_off, color: Colors.white),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    'No face detected. Please look directly at the camera and try again.',
-                    style: GoogleFonts.roboto(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.red.shade700,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-        return;
-      }
     }
 
     if (!mounted) return;

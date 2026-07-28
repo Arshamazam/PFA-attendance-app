@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:camera/camera.dart';
-import 'package:image/image.dart' as img_lib;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/geofence_zone.dart';
@@ -13,8 +11,7 @@ import '../providers/attendance_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/geofence_provider.dart';
 
-enum _Step { locating, validating, verified, outsideZone, camera, detecting, reviewing, submitting }
-enum _FaceResult { detected, noFace, error }
+enum _Step { locating, validating, verified, outsideZone, camera, reviewing, submitting }
 
 class CheckInScreen extends StatefulWidget {
   final String shift;
@@ -38,10 +35,6 @@ class _CheckInScreenState extends State<CheckInScreen> {
   bool _usePickerFallback = false;
   bool _capturing = false; // prevents double-tap on shutter
 
-  final FaceDetector _faceDetector = FaceDetector(
-    options: FaceDetectorOptions(performanceMode: FaceDetectorMode.fast),
-  );
-
   static const _primary = Color(0xFF006B3F);
 
   @override
@@ -53,7 +46,6 @@ class _CheckInScreenState extends State<CheckInScreen> {
   @override
   void dispose() {
     _cameraCtrl?.dispose();
-    _faceDetector.close();
     super.dispose();
   }
 
@@ -237,69 +229,9 @@ class _CheckInScreenState extends State<CheckInScreen> {
 
     if (captured == null) return;
 
-    // Show "Verifying face..." while detection runs
-    setState(() => _step = _Step.detecting);
-
-    final result = await _detectFace(captured.path);
-    if (!mounted) return;
-
     _capturing = false;
-    if (result == _FaceResult.detected) {
-      setState(() { _photo = captured; _step = _Step.reviewing; });
-    } else {
-      // Return to camera so user can retake
-      setState(() => _step = _Step.camera);
-      final msg = result == _FaceResult.noFace
-          ? 'No face detected. Look directly at the camera and retake.'
-          : 'Face verification failed. Please retake your photo.';
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.face_retouching_off, color: Colors.white),
-              const SizedBox(width: 10),
-              Expanded(child: Text(msg, style: GoogleFonts.roboto(color: Colors.white))),
-            ],
-          ),
-          backgroundColor: Colors.red.shade700,
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-    }
-  }
-
-  Future<_FaceResult> _detectFace(String imagePath) async {
-    String? tempPath;
-    try {
-      final fileBytes = await File(imagePath).readAsBytes();
-
-      // Decode → auto-applies EXIF rotation → resize → clean JPEG (no metadata)
-      final decoded = img_lib.decodeImage(fileBytes);
-      if (decoded == null) {
-        // Cannot decode image at all — allow through, photo is still on record
-        return _FaceResult.detected;
-      }
-      final resized = decoded.width > 640
-          ? img_lib.copyResize(decoded, width: 640)
-          : decoded;
-      final cleanJpeg = img_lib.encodeJpg(resized, quality: 88);
-      tempPath = '${imagePath}_fc.jpg';
-      await File(tempPath).writeAsBytes(cleanJpeg);
-
-      final faces = await _faceDetector.processImage(InputImage.fromFilePath(tempPath));
-      // ML Kit ran successfully — trust its result
-      return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
-    } catch (_) {
-      // ML Kit threw an exception (device incompatibility, model not loaded, etc.)
-      // Allow the photo through — it is still uploaded and visible to admin.
-      // Only block when ML Kit successfully detects ZERO faces.
-      return _FaceResult.detected;
-    } finally {
-      if (tempPath != null) {
-        try { await File(tempPath).delete(); } catch (_) {}
-      }
-    }
+    if (!mounted) return;
+    setState(() { _photo = captured; _step = _Step.reviewing; });
   }
 
   void _retakePhoto() {
@@ -475,7 +407,6 @@ class _CheckInScreenState extends State<CheckInScreen> {
         _Step.verified => _buildVerified(),
         _Step.outsideZone => _buildError(),
         _Step.camera => _buildCamera(),
-        _Step.detecting => _buildLoading('Verifying face...'),
         _Step.reviewing => _buildReview(),
         _Step.submitting => _buildLoading('Submitting attendance...'),
       },

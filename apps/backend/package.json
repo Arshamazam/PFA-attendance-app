@@ -39,6 +39,8 @@
     "class-transformer": "^0.5.1",
     "class-validator": "^0.15.1",
     "dotenv": "^17.4.2",
+    "@tensorflow/tfjs-node": "^4.22.0",
+    "@vladmandic/face-api": "^1.7.15",
     "geolib": "^3.3.14",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
