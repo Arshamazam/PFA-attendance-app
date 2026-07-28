@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
@@ -269,19 +270,42 @@ class _CheckInScreenState extends State<CheckInScreen> {
   }
 
   Future<_FaceResult> _detectFace(String imagePath) async {
-    for (int attempt = 0; attempt < 2; attempt++) {
+    try {
+      // Decode JPEG → raw RGBA pixels at ≤640px width.
+      // This avoids EXIF-rotation ambiguity that causes fromFilePath to fail
+      // on many Android front-camera images.
+      final fileBytes = await File(imagePath).readAsBytes();
+      final codec = await ui.instantiateImageCodec(fileBytes, targetWidth: 640);
+      final frame = await codec.getNextFrame();
+      final image = frame.image;
+      final w = image.width;
+      final h = image.height;
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      image.dispose();
+
+      if (byteData == null) return _FaceResult.error;
+
+      final inputImage = InputImage.fromBytes(
+        bytes: byteData.buffer.asUint8List(),
+        metadata: InputImageMetadata(
+          size: Size(w.toDouble(), h.toDouble()),
+          rotation: InputImageRotation.rotation0deg,
+          format: InputImageFormat.bgra8888,
+          bytesPerRow: w * 4, // 4 bytes per pixel (RGBA)
+        ),
+      );
+
+      final faces = await _faceDetector.processImage(inputImage);
+      return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
+    } catch (_) {
+      // Last resort: try the simple file path approach
       try {
-        final inputImage = InputImage.fromFilePath(imagePath);
-        final faces = await _faceDetector.processImage(inputImage);
+        final faces = await _faceDetector.processImage(InputImage.fromFilePath(imagePath));
         return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
       } catch (_) {
-        if (attempt == 0) {
-          // Wait briefly and retry — model may still be initialising
-          await Future.delayed(const Duration(milliseconds: 800));
-        }
+        return _FaceResult.error;
       }
     }
-    return _FaceResult.error;
   }
 
   void _retakePhoto() {
@@ -806,15 +830,21 @@ class _CheckInScreenState extends State<CheckInScreen> {
           ),
         ),
 
-        // Face guide oval
+        // Face guide oval — 72% of screen width
         Center(
-          child: Container(
-            width: 200,
-            height: 240,
-            decoration: BoxDecoration(
-              border: Border.all(color: Colors.white.withValues(alpha: 0.6), width: 2),
-              borderRadius: BorderRadius.circular(120),
-            ),
+          child: Builder(
+            builder: (context) {
+              final w = MediaQuery.of(context).size.width * 0.72;
+              final h = w * 1.25;
+              return Container(
+                width: w,
+                height: h,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.75), width: 2.5),
+                  borderRadius: BorderRadius.circular(w / 2),
+                ),
+              );
+            },
           ),
         ),
 
