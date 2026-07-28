@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:camera/camera.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -186,18 +187,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                     label: 'Morning Shift',
                     icon: Icons.wb_sunny_rounded,
                     color: const Color(0xFFF59E0B),
-                    time: '8:00 AM – 4:00 PM',
+                    time: '9:00 AM – 5:00 PM',
                     onTap: () => Navigator.of(ctx).pop('morning'),
                   ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: _ShiftCard(
-                    label: 'Night Shift',
+                    label: 'Evening Shift',
                     icon: Icons.nights_stay_rounded,
                     color: const Color(0xFF4F46E5),
-                    time: '8:00 PM – 4:00 AM',
-                    onTap: () => Navigator.of(ctx).pop('night'),
+                    time: '5:00 PM – 1:00 AM',
+                    onTap: () => Navigator.of(ctx).pop('evening'),
                   ),
                 ),
               ],
@@ -213,8 +214,55 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+  Future<bool> _detectFaceInPhoto(String imagePath) async {
+    final detector = FaceDetector(
+      options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate),
+    );
+    try {
+      final faces = await detector.processImage(InputImage.fromFilePath(imagePath));
+      return faces.isNotEmpty;
+    } catch (_) {
+      return true; // let through if detection fails (e.g. simulator)
+    } finally {
+      await detector.close();
+    }
+  }
+
   Future<void> _handleCheckOut() async {
-    // Capture a selfie for checkout
+    // ── 3-hour minimum guard ──────────────────────────────────────────────────
+    final checkInTime = context.read<AttendanceProvider>().openCheckInTime;
+    if (checkInTime != null) {
+      final elapsed = DateTime.now().difference(checkInTime);
+      if (elapsed.inMinutes < 180) {
+        final remaining = Duration(minutes: 180 - elapsed.inMinutes);
+        final h = remaining.inHours;
+        final m = remaining.inMinutes % 60;
+        final label = h > 0 ? '${h}h ${m}m' : '${m}m';
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.timer_outlined, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'You can check out in $label. Minimum 3 hours after check-in.',
+                    style: GoogleFonts.roboto(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.orange.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
+    }
+
+    // ── Capture selfie ────────────────────────────────────────────────────────
     String? photoPath;
     try {
       final cameras = await availableCameras();
@@ -240,6 +288,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       }
     } catch (_) {
       // Camera unavailable — proceed without photo
+    }
+
+    // ── Face detection on check-out photo ─────────────────────────────────────
+    if (photoPath != null && mounted) {
+      final hasFace = await _detectFaceInPhoto(photoPath);
+      if (!mounted) return;
+      if (!hasFace) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.face_retouching_off, color: Colors.white),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'No face detected. Please look directly at the camera and try again.',
+                    style: GoogleFonts.roboto(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.red.shade700,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        return;
+      }
     }
 
     if (!mounted) return;

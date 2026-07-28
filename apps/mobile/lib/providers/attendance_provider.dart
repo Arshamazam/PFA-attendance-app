@@ -21,6 +21,13 @@ class AttendanceProvider extends ChangeNotifier {
 
   bool get isCheckedIn => _isCheckedIn;
   String? get todayRecordId => _todayRecordId;
+
+  DateTime? get openCheckInTime {
+    for (final r in _records) {
+      if (r.checkInTime != null && r.checkOutTime == null) return r.checkInTime;
+    }
+    return null;
+  }
   List<AttendanceRecord> get records => List.unmodifiable(_records);
   LeaveSummary get leaveSummary => _leaveSummary;
   bool get isLoading => _isLoading;

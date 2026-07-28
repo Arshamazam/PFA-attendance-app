@@ -4,6 +4,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_mlkit_face_detection/google_mlkit_face_detection.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../models/geofence_zone.dart';
@@ -34,6 +35,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
   // Fallback to image_picker when no physical camera (e.g. simulator)
   bool _usePickerFallback = false;
 
+  final FaceDetector _faceDetector = FaceDetector(
+    options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate),
+  );
+
   static const _primary = Color(0xFF006B3F);
 
   @override
@@ -45,6 +50,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
   @override
   void dispose() {
     _cameraCtrl?.dispose();
+    _faceDetector.close();
     super.dispose();
   }
 
@@ -206,23 +212,61 @@ class _CheckInScreenState extends State<CheckInScreen> {
   }
 
   Future<void> _capturePhoto() async {
+    XFile? captured;
+
     if (_usePickerFallback) {
       final picker = ImagePicker();
-      final image = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 85,
+      captured = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+    } else {
+      try {
+        captured = await _cameraCtrl!.takePicture();
+      } catch (e) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Camera error: $e'), backgroundColor: Colors.red),
+        );
+        return;
+      }
+    }
+
+    if (captured == null) return;
+
+    // Face detection — must have at least one face
+    final hasFace = await _detectFace(captured.path);
+    if (!mounted) return;
+    if (!hasFace) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.face_retouching_off, color: Colors.white),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'No face detected. Please look directly at the camera and retake.',
+                  style: GoogleFonts.roboto(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ),
       );
-      if (image != null) setState(() { _photo = image; _step = _Step.reviewing; });
       return;
     }
+
+    setState(() { _photo = captured; _step = _Step.reviewing; });
+  }
+
+  Future<bool> _detectFace(String imagePath) async {
     try {
-      final xfile = await _cameraCtrl!.takePicture();
-      setState(() { _photo = xfile; _step = _Step.reviewing; });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Camera error: $e'), backgroundColor: Colors.red),
-      );
+      final inputImage = InputImage.fromFilePath(imagePath);
+      final faces = await _faceDetector.processImage(inputImage);
+      return faces.isNotEmpty;
+    } catch (_) {
+      return true; // if detection fails (e.g. simulator), let it through
     }
   }
 
@@ -232,7 +276,13 @@ class _CheckInScreenState extends State<CheckInScreen> {
 
   void _confirmPhoto() {
     final now = DateTime.now();
-    final cutoff = DateTime(now.year, now.month, now.day, 9, 0);
+    // Morning: on-time before 9:30 AM; Evening: on-time before 5:30 PM
+    final DateTime cutoff;
+    if (widget.shift == 'morning') {
+      cutoff = DateTime(now.year, now.month, now.day, 9, 30);
+    } else {
+      cutoff = DateTime(now.year, now.month, now.day, 17, 30);
+    }
     if (now.isAfter(cutoff)) {
       _showLateReasonModal();
     } else {
@@ -286,7 +336,9 @@ class _CheckInScreenState extends State<CheckInScreen> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Your check-in time is after 9:00 AM. Please provide a reason.',
+                widget.shift == 'morning'
+                    ? 'Your check-in time is after 9:30 AM. Please provide a reason.'
+                    : 'Your check-in time is after 5:30 PM. Please provide a reason.',
                 style: GoogleFonts.roboto(fontSize: 12, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 20),
@@ -689,7 +741,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        widget.shift == 'morning' ? 'Morning Shift' : 'Night Shift',
+                        widget.shift == 'morning' ? 'Morning Shift' : 'Evening Shift',
                         style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
                       ),
                     ],

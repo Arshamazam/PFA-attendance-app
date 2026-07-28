@@ -19,6 +19,44 @@ export class AttendanceService {
     private geofenceService: GeofenceService,
   ) {}
 
+  // PKT = UTC+5
+  private pktNow(): Date {
+    return new Date(Date.now() + 5 * 60 * 60 * 1000);
+  }
+
+  // Returns the shift-end time in UTC for a given record.
+  // Morning ends at 17:00 PKT = 12:00 UTC; Evening ends at 01:00 PKT next-day = 20:00 UTC same UTC-day.
+  private shiftEndUtc(checkInUtc: Date, shift: string | null): Date | null {
+    if (!shift) return null;
+    const pktCheckIn = new Date(checkInUtc.getTime() + 5 * 60 * 60 * 1000);
+    const pktDate = new Date(pktCheckIn);
+    if (shift === 'morning') {
+      // 17:00 PKT on the same PKT calendar day
+      pktDate.setHours(17, 0, 0, 0);
+    } else {
+      // 01:00 PKT the following calendar day
+      pktDate.setDate(pktDate.getDate() + 1);
+      pktDate.setHours(1, 0, 0, 0);
+    }
+    // Convert back to UTC
+    return new Date(pktDate.getTime() - 5 * 60 * 60 * 1000);
+  }
+
+  // Derive attendance status from shift and check-in time.
+  // Morning: on_time before 09:30 PKT, late after. Evening: on_time before 17:30 PKT, late after.
+  private resolveStatus(checkInUtc: Date, shift: string | null, lateReason?: string): string {
+    if (!shift) return lateReason ? 'late' : 'on_time';
+    const pkt = new Date(checkInUtc.getTime() + 5 * 60 * 60 * 1000);
+    const h = pkt.getHours();
+    const m = pkt.getMinutes();
+    const totalMinutes = h * 60 + m;
+    if (shift === 'morning') {
+      return totalMinutes <= 9 * 60 + 30 ? 'on_time' : 'late';
+    } else {
+      return totalMinutes <= 17 * 60 + 30 ? 'on_time' : 'late';
+    }
+  }
+
   async checkIn(employeeId: string, dto: CheckInDto) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: employeeId },
@@ -54,15 +92,33 @@ export class AttendanceService {
       this.logger.log(`Employee ${employeeId} checked in (geofence exempted) from ${dto.lat},${dto.lng}`);
     }
 
-    const existing = await this.prisma.attendance.findFirst({
+    // Auto-close any expired open check-in before allowing a new one
+    const openRecord = await this.prisma.attendance.findFirst({
       where: { employeeId, checkOutTime: null },
     });
-    if (existing) throw new BadRequestException('Already checked in. Please check out first.');
+
+    if (openRecord) {
+      const shiftEnd = this.shiftEndUtc(openRecord.checkInTime, openRecord.shift);
+      const nowUtc = new Date();
+      if (shiftEnd && nowUtc > shiftEnd) {
+        // Shift window expired — auto check-out at shift-end time
+        await this.prisma.attendance.update({
+          where: { id: openRecord.id },
+          data: { checkOutTime: shiftEnd, status: 'auto_checkout', updatedAt: nowUtc },
+        });
+        this.logger.log(`Auto checked-out record ${openRecord.id} for employee ${employeeId} at shift end`);
+      } else {
+        throw new BadRequestException('Already checked in. Please check out first.');
+      }
+    }
+
+    const now = new Date();
+    const status = this.resolveStatus(now, dto.shift ?? null, dto.lateReason);
 
     const attendance = await this.prisma.attendance.create({
       data: {
         employeeId,
-        checkInTime: new Date(),
+        checkInTime: now,
         checkInLat: dto.lat,
         checkInLng: dto.lng,
         checkInPhotoUrl: dto.photoUrl,
@@ -70,8 +126,8 @@ export class AttendanceService {
         lateReasonNotes: dto.lateReasonNotes,
         shift: dto.shift,
         geofenceZoneId: resolvedZoneId,
-        status: 'pending',
-        updatedAt: new Date(),
+        status,
+        updatedAt: now,
       },
       include: { geofenceZone: true },
     });
@@ -86,6 +142,17 @@ export class AttendanceService {
 
     if (!attendance) {
       throw new NotFoundException('Active attendance record not found');
+    }
+
+    // Enforce 3-hour minimum between check-in and check-out
+    const elapsedMs = Date.now() - attendance.checkInTime.getTime();
+    const elapsedMinutes = elapsedMs / 60_000;
+    if (elapsedMinutes < 180) {
+      const remaining = Math.ceil(180 - elapsedMinutes);
+      const h = Math.floor(remaining / 60);
+      const m = remaining % 60;
+      const label = h > 0 ? `${h}h ${m}m` : `${m}m`;
+      throw new BadRequestException(`You can only check out at least 3 hours after check-in. Please wait ${label}.`);
     }
 
     const updated = await this.prisma.attendance.update({
