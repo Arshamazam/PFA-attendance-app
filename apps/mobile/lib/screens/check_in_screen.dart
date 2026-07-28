@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:ui' as ui;
 import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img_lib;
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -270,40 +270,32 @@ class _CheckInScreenState extends State<CheckInScreen> {
   }
 
   Future<_FaceResult> _detectFace(String imagePath) async {
+    String? tempPath;
     try {
-      // Decode JPEG → raw RGBA pixels at ≤640px width.
-      // This avoids EXIF-rotation ambiguity that causes fromFilePath to fail
-      // on many Android front-camera images.
       final fileBytes = await File(imagePath).readAsBytes();
-      final codec = await ui.instantiateImageCodec(fileBytes, targetWidth: 640);
-      final frame = await codec.getNextFrame();
-      final image = frame.image;
-      final w = image.width;
-      final h = image.height;
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
-      image.dispose();
 
-      if (byteData == null) return _FaceResult.error;
+      // Decode JPEG — the image package auto-applies EXIF rotation,
+      // so the result is always upright regardless of sensor orientation.
+      final decoded = img_lib.decodeImage(fileBytes);
+      if (decoded == null) return _FaceResult.error;
 
-      final inputImage = InputImage.fromBytes(
-        bytes: byteData.buffer.asUint8List(),
-        metadata: InputImageMetadata(
-          size: Size(w.toDouble(), h.toDouble()),
-          rotation: InputImageRotation.rotation0deg,
-          format: InputImageFormat.bgra8888,
-          bytesPerRow: w * 4, // 4 bytes per pixel (RGBA)
-        ),
-      );
+      // Resize to max 640px wide (ML Kit is most reliable at this scale)
+      final resized = decoded.width > 640
+          ? img_lib.copyResize(decoded, width: 640)
+          : decoded;
 
-      final faces = await _faceDetector.processImage(inputImage);
+      // Re-encode as a clean JPEG with no EXIF metadata
+      final cleanJpeg = img_lib.encodeJpg(resized, quality: 88);
+      tempPath = '${imagePath}_fc.jpg';
+      await File(tempPath).writeAsBytes(cleanJpeg);
+
+      final faces = await _faceDetector.processImage(InputImage.fromFilePath(tempPath));
       return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
     } catch (_) {
-      // Last resort: try the simple file path approach
-      try {
-        final faces = await _faceDetector.processImage(InputImage.fromFilePath(imagePath));
-        return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
-      } catch (_) {
-        return _FaceResult.error;
+      return _FaceResult.error;
+    } finally {
+      if (tempPath != null) {
+        try { await File(tempPath).delete(); } catch (_) {}
       }
     }
   }
