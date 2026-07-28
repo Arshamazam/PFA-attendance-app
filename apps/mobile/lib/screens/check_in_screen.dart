@@ -35,9 +35,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
 
   // Fallback to image_picker when no physical camera (e.g. simulator)
   bool _usePickerFallback = false;
+  bool _capturing = false; // prevents double-tap on shutter
 
   final FaceDetector _faceDetector = FaceDetector(
-    options: FaceDetectorOptions(performanceMode: FaceDetectorMode.accurate),
+    options: FaceDetectorOptions(performanceMode: FaceDetectorMode.fast),
   );
 
   static const _primary = Color(0xFF006B3F);
@@ -203,7 +204,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
         (c) => c.lensDirection == CameraLensDirection.front,
         orElse: () => cameras.first,
       );
-      _cameraCtrl = CameraController(front, ResolutionPreset.high, enableAudio: false);
+      _cameraCtrl = CameraController(front, ResolutionPreset.medium, enableAudio: false);
       await _cameraCtrl!.initialize();
     } catch (_) {
       _cameraCtrl?.dispose();
@@ -213,6 +214,8 @@ class _CheckInScreenState extends State<CheckInScreen> {
   }
 
   Future<void> _capturePhoto() async {
+    if (_capturing) return; // block double-tap
+    _capturing = true;
     XFile? captured;
 
     if (_usePickerFallback) {
@@ -222,6 +225,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
       try {
         captured = await _cameraCtrl!.takePicture();
       } catch (e) {
+        _capturing = false;
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Camera error: $e'), backgroundColor: Colors.red),
@@ -238,6 +242,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
     final result = await _detectFace(captured.path);
     if (!mounted) return;
 
+    _capturing = false;
     if (result == _FaceResult.detected) {
       setState(() { _photo = captured; _step = _Step.reviewing; });
     } else {
@@ -264,13 +269,19 @@ class _CheckInScreenState extends State<CheckInScreen> {
   }
 
   Future<_FaceResult> _detectFace(String imagePath) async {
-    try {
-      final inputImage = InputImage.fromFilePath(imagePath);
-      final faces = await _faceDetector.processImage(inputImage);
-      return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
-    } catch (_) {
-      return _FaceResult.error;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      try {
+        final inputImage = InputImage.fromFilePath(imagePath);
+        final faces = await _faceDetector.processImage(inputImage);
+        return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
+      } catch (_) {
+        if (attempt == 0) {
+          // Wait briefly and retry — model may still be initialising
+          await Future.delayed(const Duration(milliseconds: 800));
+        }
+      }
     }
+    return _FaceResult.error;
   }
 
   void _retakePhoto() {
