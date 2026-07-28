@@ -7,7 +7,7 @@ import api from "@/lib/api";
 import { format, parseISO } from "date-fns";
 import {
   MapPin, Clock, CheckCircle2, AlertCircle, RefreshCw,
-  ChevronDown, Navigation, Wifi, Eye, X, Calendar,
+  ChevronDown, ChevronLeft, ChevronRight, Navigation, Wifi, Eye, X, Calendar,
 } from "lucide-react";
 
 /* ── helpers ─────────────────────────────────────────────── */
@@ -67,10 +67,13 @@ function PhotoModal({ url, name, onClose }: { url: string; name: string; onClose
 /* ══════════════════════════════════════════════════════════
    PAGE
 ═══════════════════════════════════════════════════════════ */
+const PAGE_SIZE = 20;
+
 export default function LocationMonitorPage() {
   const [selectedZone, setSelectedZone] = useState("");
   const [photoModal, setPhotoModal]     = useState<{ url: string; name: string } | null>(null);
   const [lastRefresh, setLastRefresh]   = useState(new Date());
+  const [page, setPage]                 = useState(1);
 
   const today = format(new Date(), "yyyy-MM-dd");
   const [fromDate, setFromDate] = useState(today);
@@ -81,6 +84,9 @@ export default function LocationMonitorPage() {
     setFromDate(val);
     if (val > toDate) setToDate(val);
   };
+
+  // reset to page 1 whenever filters change
+  useEffect(() => { setPage(1); }, [selectedZone, fromDate, toDate]);
 
   const isToday = fromDate === today && toDate === today;
 
@@ -107,6 +113,10 @@ export default function LocationMonitorPage() {
   const filtered = selectedZone
     ? records.filter(r => r.geofenceZoneId === selectedZone)
     : records;
+
+  /* pagination */
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   /* zone breakdown */
   const zoneMap: Record<string, { name: string; count: number; onTime: number; late: number }> = {};
@@ -313,7 +323,7 @@ export default function LocationMonitorPage() {
                     </td>
                   </tr>
                 ) : (
-                  filtered.map(r => {
+                  paginated.map(r => {
                     const name = r.employee?.name ?? "Unknown";
                     const bg   = avatarBg(name);
                     const late = isLate(r.checkInTime);
@@ -416,14 +426,61 @@ export default function LocationMonitorPage() {
             </table>
           </div>
 
-          {/* Footer note */}
-          <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between">
+          {/* Pagination footer */}
+          <div className="px-5 py-3 border-t border-gray-50 flex items-center justify-between flex-wrap gap-3">
             <p className="text-[11px] text-gray-400">
-              {isToday ? "Auto-refreshes every 60 seconds · " : ""}GPS links open in Google Maps
+              {filtered.length === 0
+                ? "No records"
+                : `Showing ${(page - 1) * PAGE_SIZE + 1}–${Math.min(page * PAGE_SIZE, filtered.length)} of ${filtered.length} record${filtered.length !== 1 ? "s" : ""}`}
+              {isToday ? " · Auto-refreshes every 60s" : ""}
             </p>
-            <p className="text-[11px] text-gray-400">
-              All times in PKT (UTC+5)
-            </p>
+
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={12} /> Prev
+              </button>
+
+              {/* page number pills */}
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter(n => n === 1 || n === totalPages || Math.abs(n - page) <= 1)
+                .reduce<(number | "…")[]>((acc, n, idx, arr) => {
+                  if (idx > 0 && n - (arr[idx - 1] as number) > 1) acc.push("…");
+                  acc.push(n);
+                  return acc;
+                }, [])
+                .map((n, i) =>
+                  n === "…" ? (
+                    <span key={`ellipsis-${i}`} className="px-1 text-[11px] text-gray-300">…</span>
+                  ) : (
+                    <button
+                      key={n}
+                      onClick={() => setPage(n as number)}
+                      className={`w-7 h-7 rounded-lg text-[11px] font-bold transition-colors ${
+                        page === n
+                          ? "text-white"
+                          : "border border-gray-200 text-gray-600 hover:bg-gray-50"
+                      }`}
+                      style={page === n ? { background: G } : undefined}
+                    >
+                      {n}
+                    </button>
+                  )
+                )}
+
+              <button
+                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page >= totalPages}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                Next <ChevronRight size={12} />
+              </button>
+            </div>
+
+            <p className="text-[11px] text-gray-400">All times in PKT (UTC+5)</p>
           </div>
         </div>
 
