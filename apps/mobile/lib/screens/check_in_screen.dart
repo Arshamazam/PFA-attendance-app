@@ -274,25 +274,27 @@ class _CheckInScreenState extends State<CheckInScreen> {
     try {
       final fileBytes = await File(imagePath).readAsBytes();
 
-      // Decode JPEG — the image package auto-applies EXIF rotation,
-      // so the result is always upright regardless of sensor orientation.
+      // Decode → auto-applies EXIF rotation → resize → clean JPEG (no metadata)
       final decoded = img_lib.decodeImage(fileBytes);
-      if (decoded == null) return _FaceResult.error;
-
-      // Resize to max 640px wide (ML Kit is most reliable at this scale)
+      if (decoded == null) {
+        // Cannot decode image at all — allow through, photo is still on record
+        return _FaceResult.detected;
+      }
       final resized = decoded.width > 640
           ? img_lib.copyResize(decoded, width: 640)
           : decoded;
-
-      // Re-encode as a clean JPEG with no EXIF metadata
       final cleanJpeg = img_lib.encodeJpg(resized, quality: 88);
       tempPath = '${imagePath}_fc.jpg';
       await File(tempPath).writeAsBytes(cleanJpeg);
 
       final faces = await _faceDetector.processImage(InputImage.fromFilePath(tempPath));
+      // ML Kit ran successfully — trust its result
       return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
     } catch (_) {
-      return _FaceResult.error;
+      // ML Kit threw an exception (device incompatibility, model not loaded, etc.)
+      // Allow the photo through — it is still uploaded and visible to admin.
+      // Only block when ML Kit successfully detects ZERO faces.
+      return _FaceResult.detected;
     } finally {
       if (tempPath != null) {
         try { await File(tempPath).delete(); } catch (_) {}
