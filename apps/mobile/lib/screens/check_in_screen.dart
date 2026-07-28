@@ -12,7 +12,8 @@ import '../providers/attendance_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/geofence_provider.dart';
 
-enum _Step { locating, validating, verified, outsideZone, camera, reviewing, submitting }
+enum _Step { locating, validating, verified, outsideZone, camera, detecting, reviewing, submitting }
+enum _FaceResult { detected, noFace, error }
 
 class CheckInScreen extends StatefulWidget {
   final String shift;
@@ -231,22 +232,27 @@ class _CheckInScreenState extends State<CheckInScreen> {
 
     if (captured == null) return;
 
-    // Face detection — must have at least one face
-    final hasFace = await _detectFace(captured.path);
+    // Show "Verifying face..." while detection runs
+    setState(() => _step = _Step.detecting);
+
+    final result = await _detectFace(captured.path);
     if (!mounted) return;
-    if (!hasFace) {
+
+    if (result == _FaceResult.detected) {
+      setState(() { _photo = captured; _step = _Step.reviewing; });
+    } else {
+      // Return to camera so user can retake
+      setState(() => _step = _Step.camera);
+      final msg = result == _FaceResult.noFace
+          ? 'No face detected. Look directly at the camera and retake.'
+          : 'Face verification failed. Please retake your photo.';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Row(
             children: [
               const Icon(Icons.face_retouching_off, color: Colors.white),
               const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'No face detected. Please look directly at the camera and retake.',
-                  style: GoogleFonts.roboto(color: Colors.white),
-                ),
-              ),
+              Expanded(child: Text(msg, style: GoogleFonts.roboto(color: Colors.white))),
             ],
           ),
           backgroundColor: Colors.red.shade700,
@@ -254,19 +260,16 @@ class _CheckInScreenState extends State<CheckInScreen> {
           duration: const Duration(seconds: 4),
         ),
       );
-      return;
     }
-
-    setState(() { _photo = captured; _step = _Step.reviewing; });
   }
 
-  Future<bool> _detectFace(String imagePath) async {
+  Future<_FaceResult> _detectFace(String imagePath) async {
     try {
       final inputImage = InputImage.fromFilePath(imagePath);
       final faces = await _faceDetector.processImage(inputImage);
-      return faces.isNotEmpty;
+      return faces.isNotEmpty ? _FaceResult.detected : _FaceResult.noFace;
     } catch (_) {
-      return true; // if detection fails (e.g. simulator), let it through
+      return _FaceResult.error;
     }
   }
 
@@ -443,6 +446,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
         _Step.verified => _buildVerified(),
         _Step.outsideZone => _buildError(),
         _Step.camera => _buildCamera(),
+        _Step.detecting => _buildLoading('Verifying face...'),
         _Step.reviewing => _buildReview(),
         _Step.submitting => _buildLoading('Submitting attendance...'),
       },

@@ -222,7 +222,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       final faces = await detector.processImage(InputImage.fromFilePath(imagePath));
       return faces.isNotEmpty;
     } catch (_) {
-      return true; // let through if detection fails (e.g. simulator)
+      return false; // block on error — do not allow unverified photos
     } finally {
       await detector.close();
     }
