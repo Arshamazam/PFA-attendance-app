@@ -89,6 +89,7 @@ class AttendanceProvider extends ChangeNotifier {
     String? lateReason,
     String? lateReasonNotes,
     String? photoPath,
+    String? shift,
   }) async {
     final result = await _api.checkIn(
       latitude: latitude,
@@ -98,6 +99,7 @@ class AttendanceProvider extends ChangeNotifier {
       lateReason: lateReason,
       lateReasonNotes: lateReasonNotes,
       photoPath: photoPath,
+      shift: shift,
     );
     _isCheckedIn = true;
     _todayRecordId = result['id'] as String?;

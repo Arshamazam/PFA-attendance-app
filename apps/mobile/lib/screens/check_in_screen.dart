@@ -14,7 +14,8 @@ import '../providers/geofence_provider.dart';
 enum _Step { locating, validating, verified, outsideZone, camera, reviewing, submitting }
 
 class CheckInScreen extends StatefulWidget {
-  const CheckInScreen({super.key});
+  final String shift;
+  const CheckInScreen({super.key, required this.shift});
 
   @override
   State<CheckInScreen> createState() => _CheckInScreenState();
@@ -350,6 +351,7 @@ class _CheckInScreenState extends State<CheckInScreen> {
         lateReason: lateReason,
         lateReasonNotes: lateReasonNotes,
         photoPath: _photo?.path,
+        shift: widget.shift,
       );
       if (!mounted) return;
       final now = DateTime.now();
@@ -659,49 +661,81 @@ class _CheckInScreenState extends State<CheckInScreen> {
           ),
         ),
 
-        // Zone indicator (or exemption badge)
+        // Zone indicator / shift badge
         Positioned(
           top: 80,
           left: 0,
           right: 0,
           child: Center(
-            child: _isExempted
-                ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: Colors.orange.withValues(alpha: 0.9),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.shield_outlined, color: Colors.white, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Geofence Exempted',
-                          style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  )
-                : Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: _primary.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.location_on, color: Colors.white, size: 14),
-                        const SizedBox(width: 4),
-                        Text(
-                          _matchedZone?.name ?? 'Office',
-                          style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Shift badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: widget.shift == 'morning'
+                        ? Colors.amber.shade700.withValues(alpha: 0.9)
+                        : Colors.indigo.withValues(alpha: 0.9),
+                    borderRadius: BorderRadius.circular(20),
                   ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        widget.shift == 'morning' ? Icons.wb_sunny_rounded : Icons.nights_stay_rounded,
+                        color: Colors.white,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        widget.shift == 'morning' ? 'Morning Shift' : 'Night Shift',
+                        style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Zone badge
+                _isExempted
+                    ? Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withValues(alpha: 0.9),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.shield_outlined, color: Colors.white, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Geofence Exempted',
+                              style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      )
+                    : Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: _primary.withValues(alpha: 0.85),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.location_on, color: Colors.white, size: 14),
+                            const SizedBox(width: 4),
+                            Text(
+                              _matchedZone?.name ?? 'Office',
+                              style: GoogleFonts.roboto(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+              ],
+            ),
           ),
         ),
 

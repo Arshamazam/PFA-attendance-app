@@ -68,6 +68,7 @@ export class AttendanceService {
         checkInPhotoUrl: dto.photoUrl,
         lateReason: dto.lateReason,
         lateReasonNotes: dto.lateReasonNotes,
+        shift: dto.shift,
         geofenceZoneId: resolvedZoneId,
         status: 'pending',
         updatedAt: new Date(),

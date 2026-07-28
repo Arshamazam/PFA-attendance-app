@@ -147,6 +147,7 @@ class ApiService {
     String? lateReason,
     String? lateReasonNotes,
     String? photoPath,
+    String? shift,
   }) async {
     String? photoUrl;
     if (photoPath != null) {
@@ -161,6 +162,7 @@ class ApiService {
         if (photoUrl != null) 'photoUrl': photoUrl,
         if (lateReason != null) 'lateReason': lateReason,
         if (lateReasonNotes != null && lateReasonNotes.isNotEmpty) 'lateReasonNotes': lateReasonNotes,
+        if (shift != null) 'shift': shift,
       }),
       (data) => data as Map<String, dynamic>? ?? {},
     );

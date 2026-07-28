@@ -6,4 +6,5 @@ export class CheckInDto {
   lateReason?: string;
   lateReasonNotes?: string;
   gpsAccuracy?: number;
+  shift?: string;
 }

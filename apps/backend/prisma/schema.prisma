@@ -109,6 +109,7 @@ model Attendance {
   checkOutPhotoUrl String?
   lateReason       String?
   lateReasonNotes  String?
+  shift            String?
   geofenceZoneId  String?
   geofenceZone    GeofenceZone? @relation(fields: [geofenceZoneId], references: [id])
   status          String       @default("pending")

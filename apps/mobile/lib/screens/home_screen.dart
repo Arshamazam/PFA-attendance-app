@@ -139,12 +139,78 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   // ─── Actions ────────────────────────────────────────────────────────────────
 
   Future<void> _handleCheckIn() async {
+    final shift = await _selectShift();
+    if (shift == null || !mounted) return;
     final result = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(builder: (_) => const CheckInScreen()),
+      MaterialPageRoute(builder: (_) => CheckInScreen(shift: shift)),
     );
     if (result == true && mounted) {
       context.read<AttendanceProvider>().fetchDashboard();
     }
+  }
+
+  Future<String?> _selectShift() {
+    return showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              'Select Your Shift',
+              style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: const Color(0xFF1A1A1A)),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Choose your shift before marking attendance',
+              style: GoogleFonts.roboto(fontSize: 13, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: _ShiftCard(
+                    label: 'Morning Shift',
+                    icon: Icons.wb_sunny_rounded,
+                    color: const Color(0xFFF59E0B),
+                    time: '8:00 AM – 4:00 PM',
+                    onTap: () => Navigator.of(ctx).pop('morning'),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: _ShiftCard(
+                    label: 'Night Shift',
+                    icon: Icons.nights_stay_rounded,
+                    color: const Color(0xFF4F46E5),
+                    time: '8:00 PM – 4:00 AM',
+                    onTap: () => Navigator.of(ctx).pop('night'),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text('Cancel', style: GoogleFonts.roboto(color: Colors.grey.shade500, fontSize: 14)),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _handleCheckOut() async {
@@ -1195,4 +1261,67 @@ class _GlowPainter extends CustomPainter {
   @override
   bool shouldRepaint(_GlowPainter old) =>
       old.value != value || old.color != color;
+}
+
+class _ShiftCard extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final Color color;
+  final String time;
+  final VoidCallback onTap;
+
+  const _ShiftCard({
+    required this.label,
+    required this.icon,
+    required this.color,
+    required this.time,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: color.withValues(alpha: 0.3), width: 1.5),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: color, size: 28),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              label,
+              style: GoogleFonts.poppins(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: const Color(0xFF1A1A1A),
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              time,
+              style: GoogleFonts.roboto(
+                fontSize: 11,
+                color: Colors.grey.shade500,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
