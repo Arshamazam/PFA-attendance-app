@@ -783,7 +783,7 @@ export default function DashboardPage() {
               const empName = r.employee?.name ?? "—";
               const pkt = new Date(new Date(r.checkInTime).getTime() + 5 * 3600000);
               const h = pkt.getUTCHours(), m = pkt.getUTCMinutes();
-              const isLate = h > 9 || (h === 9 && m > 0);
+              const isLate = h > 9 || (h === 9 && m > 30);
               const bg = avatarBg(empName);
               const photoUrl = (r as any).checkInPhotoUrl
                 ? `${BACKEND_URL}${(r as any).checkInPhotoUrl}`

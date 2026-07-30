@@ -275,7 +275,7 @@ export class AttendanceService {
 
     const onTime = records.filter((r) => {
       const { h, m } = pktHour(r.checkInTime);
-      return h < 9 || (h === 9 && m === 0);
+      return h < 9 || (h === 9 && m <= 30);
     }).length;
 
     const avgMins =
@@ -293,7 +293,7 @@ export class AttendanceService {
       const dept = r.employee?.department ?? 'Unknown';
       if (!byDept[dept]) byDept[dept] = { onTime: 0, late: 0 };
       const { h, m } = pktHour(r.checkInTime);
-      if (h < 9 || (h === 9 && m === 0)) byDept[dept].onTime++;
+      if (h < 9 || (h === 9 && m <= 30)) byDept[dept].onTime++;
       else byDept[dept].late++;
     }
 

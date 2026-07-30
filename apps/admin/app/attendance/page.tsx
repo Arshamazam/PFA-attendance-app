@@ -32,7 +32,7 @@ function dur(checkIn: string, checkOut: string | null) {
 
 function isLate(checkIn: string) {
   const dt = parseISO(checkIn);
-  return dt.getHours() > 9 || (dt.getHours() === 9 && dt.getMinutes() > 0);
+  return dt.getHours() > 9 || (dt.getHours() === 9 && dt.getMinutes() > 30);
 }
 
 interface Stats { totalCheckIns: number; onTime: number; late: number; absent: number; avgCheckInTime: string; totalEmployees: number; }
