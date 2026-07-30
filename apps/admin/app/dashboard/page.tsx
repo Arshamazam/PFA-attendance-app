@@ -781,9 +781,9 @@ export default function DashboardPage() {
           <div className="divide-y divide-gray-50">
             {(attendance?.data ?? []).slice(0, 8).map((r) => {
               const empName = r.employee?.name ?? "—";
-              const pkt = new Date(new Date(r.checkInTime).getTime() + 5 * 3600000);
-              const h = pkt.getUTCHours(), m = pkt.getUTCMinutes();
-              const isLate = h > 9 || (h === 9 && m > 30);
+              const pktRaw = new Date(new Date(r.checkInTime).getTime() + 5 * 3600_000);
+              const pktLocal = new Date(pktRaw.getUTCFullYear(), pktRaw.getUTCMonth(), pktRaw.getUTCDate(), pktRaw.getUTCHours(), pktRaw.getUTCMinutes(), pktRaw.getUTCSeconds());
+              const isLate = pktLocal.getHours() > 9 || (pktLocal.getHours() === 9 && pktLocal.getMinutes() > 30);
               const bg = avatarBg(empName);
               const photoUrl = (r as any).checkInPhotoUrl
                 ? `${BACKEND_URL}${(r as any).checkInPhotoUrl}`
@@ -808,8 +808,8 @@ export default function DashboardPage() {
                     <p className="text-[11px] text-gray-400 truncate">{(r.employee as any)?.email ?? ""}</p>
                   </div>
                   <div className="text-right shrink-0">
-                    <p className="text-[13px] font-semibold text-gray-700 tabular-nums">{format(parseISO(r.checkInTime), "h:mm a")}</p>
-                    <p className="text-[10px] text-gray-400">{format(parseISO(r.checkInTime), "dd MMM")}</p>
+                    <p className="text-[13px] font-semibold text-gray-700 tabular-nums">{format(pktLocal, "h:mm a")}</p>
+                    <p className="text-[10px] text-gray-400">{format(pktLocal, "dd MMM")}</p>
                   </div>
                   <span className={`text-[11px] font-bold px-2.5 py-1 rounded-lg ${isLate ? "bg-orange-50 text-orange-600" : "bg-emerald-50 text-emerald-700"}`}>
                     {isLate ? "Late" : "On Time"}

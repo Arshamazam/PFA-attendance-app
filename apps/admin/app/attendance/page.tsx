@@ -25,8 +25,15 @@ function resolveUrl(url: string | null | undefined): string | null {
 }
 
 const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
-function toPKT(dt: Date) { return new Date(dt.getTime() + PKT_OFFSET_MS); }
-function fmtPKT(iso: string, fmt: string) { return format(toPKT(parseISO(iso)), fmt); }
+
+// Converts UTC ISO string → a Date whose LOCAL fields equal the PKT values,
+// so date-fns format() produces correct PKT output regardless of browser timezone.
+function toPKTLocal(iso: string): Date {
+  const pkt = new Date(parseISO(iso).getTime() + PKT_OFFSET_MS);
+  return new Date(pkt.getUTCFullYear(), pkt.getUTCMonth(), pkt.getUTCDate(),
+                  pkt.getUTCHours(), pkt.getUTCMinutes(), pkt.getUTCSeconds());
+}
+function fmtPKT(iso: string, fmt: string) { return format(toPKTLocal(iso), fmt); }
 
 function dur(checkIn: string, checkOut: string | null) {
   if (!checkOut) return "—";
@@ -35,9 +42,8 @@ function dur(checkIn: string, checkOut: string | null) {
 }
 
 function isLate(checkIn: string) {
-  const pkt = toPKT(parseISO(checkIn));
-  const h = pkt.getUTCHours(), m = pkt.getUTCMinutes();
-  return h > 9 || (h === 9 && m > 30);
+  const pkt = toPKTLocal(checkIn);
+  return pkt.getHours() > 9 || (pkt.getHours() === 9 && pkt.getMinutes() > 30);
 }
 
 interface Stats { totalCheckIns: number; onTime: number; late: number; absent: number; avgCheckInTime: string; totalEmployees: number; }
