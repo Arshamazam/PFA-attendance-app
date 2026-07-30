@@ -1,10 +1,9 @@
-import { Controller, Post, Get, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
-import { existsSync, mkdirSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync } from 'fs';
 import { AttendanceService } from './attendance.service';
-import { FaceDetectionService } from './face-detection.service';
 import { CheckInDto } from './dto/check-in.dto';
 import { CheckOutDto } from './dto/check-out.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
@@ -17,7 +16,6 @@ import { CurrentUser } from 'src/common/decorators/current-user.decorator';
 export class AttendanceController {
   constructor(
     private readonly attendanceService: AttendanceService,
-    private readonly faceDetectionService: FaceDetectionService,
   ) {}
 
   @Post('upload-photo')
@@ -36,14 +34,7 @@ export class AttendanceController {
       limits: { fileSize: 10 * 1024 * 1024 },
     }),
   )
-  async uploadPhoto(@UploadedFile() file: Express.Multer.File) {
-    const hasFace = await this.faceDetectionService.hasFace(file.path);
-    if (!hasFace) {
-      try { unlinkSync(file.path); } catch {}
-      throw new BadRequestException(
-        'No face detected. Please look directly at the camera and take a clear selfie.',
-      );
-    }
+  uploadPhoto(@UploadedFile() file: Express.Multer.File) {
     return { url: `/uploads/attendance/${file.filename}` };
   }
 
