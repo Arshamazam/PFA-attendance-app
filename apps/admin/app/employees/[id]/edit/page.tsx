@@ -116,8 +116,7 @@ export default function EditEmployeePage() {
     ),
   });
   const managers = (managersData ?? [])
-    .filter((m) => ["manager", "admin"].includes(m.role))
-    .map((m) => ({ value: m.id, label: m.name, sub: `${m.role}${m.designation ? ` · ${m.designation}` : ""}` }));
+    .map((m) => ({ value: m.id, label: m.name, sub: m.designation ?? m.role }));
 
   // Leave balance state
   const [adjustLeaveType, setAdjustLeaveType] = useState("Annual");
@@ -403,7 +402,7 @@ export default function EditEmployeePage() {
           <Field label="Reporting Officer">
             <SearchableSelect
               value={f("reportingOfficerId")} onChange={(v) => set("reportingOfficerId", v)}
-              options={managers.length ? managers : [{ value: "", label: "No managers found", sub: "Add a manager first" }]}
+              options={managers.length ? managers : [{ value: "", label: "No employees found", sub: "No employees available" }]}
               placeholder="Select reporting officer" searchPlaceholder="Search by name…"
             />
           </Field>
