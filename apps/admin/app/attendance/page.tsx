@@ -24,6 +24,10 @@ function resolveUrl(url: string | null | undefined): string | null {
   return `${BACKEND}${url}`;
 }
 
+const PKT_OFFSET_MS = 5 * 60 * 60 * 1000;
+function toPKT(dt: Date) { return new Date(dt.getTime() + PKT_OFFSET_MS); }
+function fmtPKT(iso: string, fmt: string) { return format(toPKT(parseISO(iso)), fmt); }
+
 function dur(checkIn: string, checkOut: string | null) {
   if (!checkOut) return "—";
   const mins = differenceInMinutes(parseISO(checkOut), parseISO(checkIn));
@@ -31,8 +35,9 @@ function dur(checkIn: string, checkOut: string | null) {
 }
 
 function isLate(checkIn: string) {
-  const dt = parseISO(checkIn);
-  return dt.getHours() > 9 || (dt.getHours() === 9 && dt.getMinutes() > 30);
+  const pkt = toPKT(parseISO(checkIn));
+  const h = pkt.getUTCHours(), m = pkt.getUTCMinutes();
+  return h > 9 || (h === 9 && m > 30);
 }
 
 interface Stats { totalCheckIns: number; onTime: number; late: number; absent: number; avgCheckInTime: string; totalEmployees: number; }
@@ -91,9 +96,9 @@ export default function AttendancePage() {
     const header = ["Employee", "Email", "Date", "Check-In", "Check-Out", "Duration", "Status", "Zone"];
     const rows = (data?.data ?? []).map((r) => [
       r.employee?.name ?? "", r.employee?.email ?? "",
-      format(parseISO(r.checkInTime), "yyyy-MM-dd"),
-      format(parseISO(r.checkInTime), "HH:mm:ss"),
-      r.checkOutTime ? format(parseISO(r.checkOutTime), "HH:mm:ss") : "",
+      fmtPKT(r.checkInTime, "yyyy-MM-dd"),
+      fmtPKT(r.checkInTime, "HH:mm:ss"),
+      r.checkOutTime ? fmtPKT(r.checkOutTime, "HH:mm:ss") : "",
       dur(r.checkInTime, r.checkOutTime),
       isLate(r.checkInTime) ? "Late" : "On Time",
       r.geofenceZone?.name ?? "",
@@ -109,9 +114,9 @@ export default function AttendancePage() {
     const header = ["Employee", "Email", "Date", "Check-In", "Check-Out", "Duration", "Status", "Zone"];
     const rows = (data?.data ?? []).map((r) => [
       r.employee?.name ?? "", r.employee?.email ?? "",
-      format(parseISO(r.checkInTime), "yyyy-MM-dd"),
-      format(parseISO(r.checkInTime), "HH:mm:ss"),
-      r.checkOutTime ? format(parseISO(r.checkOutTime), "HH:mm:ss") : "",
+      fmtPKT(r.checkInTime, "yyyy-MM-dd"),
+      fmtPKT(r.checkInTime, "HH:mm:ss"),
+      r.checkOutTime ? fmtPKT(r.checkOutTime, "HH:mm:ss") : "",
       dur(r.checkInTime, r.checkOutTime),
       isLate(r.checkInTime) ? "Late" : "On Time",
       r.geofenceZone?.name ?? "",
@@ -219,9 +224,9 @@ export default function AttendancePage() {
                         <p className="text-sm font-medium">{r.employee?.name ?? "—"}</p>
                         <p className="text-xs text-gray-400">{r.employee?.email}</p>
                       </TableCell>
-                      <TableCell className="text-sm text-gray-600">{format(parseISO(r.checkInTime), "dd MMM yyyy")}</TableCell>
-                      <TableCell className="text-sm font-mono text-gray-700">{format(parseISO(r.checkInTime), "h:mm a")}</TableCell>
-                      <TableCell className="text-sm font-mono text-gray-700">{r.checkOutTime ? format(parseISO(r.checkOutTime), "h:mm a") : <span className="text-gray-300">—</span>}</TableCell>
+                      <TableCell className="text-sm text-gray-600">{fmtPKT(r.checkInTime, "dd MMM yyyy")}</TableCell>
+                      <TableCell className="text-sm font-mono text-gray-700">{fmtPKT(r.checkInTime, "h:mm a")}</TableCell>
+                      <TableCell className="text-sm font-mono text-gray-700">{r.checkOutTime ? fmtPKT(r.checkOutTime, "h:mm a") : <span className="text-gray-300">—</span>}</TableCell>
                       <TableCell className="text-sm text-gray-600">{dur(r.checkInTime, r.checkOutTime)}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={late ? "bg-orange-50 text-orange-700 border-orange-200" : "bg-green-50 text-green-700 border-green-200"}>
@@ -268,14 +273,14 @@ export default function AttendancePage() {
               <Camera className="w-4 h-4" />
               Attendance Photos — {photoRecord?.employee?.name ?? ""}
               <span className="text-xs font-normal text-gray-400 ml-1">
-                {photoRecord?.checkInTime ? format(parseISO(photoRecord.checkInTime), "dd MMM yyyy") : ""}
+                {photoRecord?.checkInTime ? fmtPKT(photoRecord.checkInTime, "dd MMM yyyy") : ""}
               </span>
             </DialogTitle>
           </DialogHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
             <div className="space-y-2">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Check-in · {photoRecord?.checkInTime ? format(parseISO(photoRecord.checkInTime), "h:mm a") : "—"}
+                Check-in · {photoRecord?.checkInTime ? fmtPKT(photoRecord.checkInTime, "h:mm a") : "—"}
               </p>
               {resolveUrl(photoRecord?.checkInPhotoUrl) ? (
                 <div className="relative group">
@@ -302,7 +307,7 @@ export default function AttendancePage() {
             </div>
             <div className="space-y-2">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                Check-out · {photoRecord?.checkOutTime ? format(parseISO(photoRecord.checkOutTime), "h:mm a") : "Not checked out"}
+                Check-out · {photoRecord?.checkOutTime ? fmtPKT(photoRecord.checkOutTime, "h:mm a") : "Not checked out"}
               </p>
               {resolveUrl(photoRecord?.checkOutPhotoUrl) ? (
                 <div className="relative group">
