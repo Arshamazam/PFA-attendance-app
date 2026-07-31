@@ -69,23 +69,29 @@ function ExemptModal({
 export default function EmployeesPage() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [exemptTarget, setExemptTarget] = useState<Employee | null>(null);
 
+  // Debounce search so we don't hammer the API on every keystroke
+  const debounceRef = useState<ReturnType<typeof setTimeout> | null>(null);
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    if (debounceRef[0]) clearTimeout(debounceRef[0]);
+    debounceRef[1](setTimeout(() => setDebouncedSearch(val), 300));
+  }
+
   const { data: raw, isLoading, refetch } = useQuery({
-    queryKey: ["sa-employees"],
+    queryKey: ["sa-employees", debouncedSearch],
     queryFn: () =>
-      api.get("/employees", { params: { limit: 200 } }).then((r) => {
+      api.get("/employees", {
+        params: { limit: 1000, ...(debouncedSearch ? { search: debouncedSearch } : {}) },
+      }).then((r) => {
         const d = r.data;
         return (Array.isArray(d) ? d : d?.data ?? []) as Employee[];
       }),
   });
 
-  const employees = (raw ?? []).filter((e) =>
-    !search ||
-    e.name.toLowerCase().includes(search.toLowerCase()) ||
-    e.email.toLowerCase().includes(search.toLowerCase()) ||
-    (e.department ?? "").toLowerCase().includes(search.toLowerCase())
-  );
+  const employees = raw ?? [];
 
   const toggleMutation = useMutation({
     mutationFn: ({ id, requiresGeofence, reason }: { id: string; requiresGeofence: boolean; reason?: string }) =>
@@ -148,11 +154,11 @@ export default function EmployeesPage() {
       {/* Search */}
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
-        <input value={search} onChange={(e) => setSearch(e.target.value)}
+        <input value={search} onChange={(e) => handleSearchChange(e.target.value)}
           placeholder="Search by name, email, or department…"
           className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-xl text-sm bg-white shadow-sm focus:outline-none focus:ring-2 focus:ring-purple-400 focus:border-transparent" />
         {search && (
-          <button onClick={() => setSearch("")} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+          <button onClick={() => { setSearch(""); setDebouncedSearch(""); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
             <X size={14} />
           </button>
         )}
