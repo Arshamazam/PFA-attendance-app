@@ -111,7 +111,7 @@ export default function EditEmployeePage() {
   // Fetch managers/admins for Reporting Officer dropdown
   const { data: managersData } = useQuery({
     queryKey: ["managers-list"],
-    queryFn:  () => api.get("/employees?limit=200").then((r) =>
+    queryFn:  () => api.get("/employees?limit=10000").then((r) =>
       (r.data as { data: { id: string; name: string; role: string; designation?: string }[] }).data
     ),
   });

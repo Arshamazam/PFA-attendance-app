@@ -84,7 +84,7 @@ export default function EmployeesPage() {
     queryKey: ["sa-employees", debouncedSearch],
     queryFn: () =>
       api.get("/employees", {
-        params: { limit: 1000, ...(debouncedSearch ? { search: debouncedSearch } : {}) },
+        params: { limit: 10000, ...(debouncedSearch ? { search: debouncedSearch } : {}) },
       }).then((r) => {
         const d = r.data;
         return (Array.isArray(d) ? d : d?.data ?? []) as Employee[];
