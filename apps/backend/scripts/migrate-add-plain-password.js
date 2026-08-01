@@ -10,11 +10,22 @@ const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
 
 async function main() {
-  await prisma.$executeRawUnsafe(`
-    ALTER TABLE \`Employee\`
-    ADD COLUMN IF NOT EXISTS \`plainPassword\` VARCHAR(255) NULL
+  const rows = await prisma.$queryRawUnsafe(`
+    SELECT COUNT(*) as cnt
+    FROM information_schema.columns
+    WHERE table_schema = DATABASE()
+      AND table_name   = 'Employee'
+      AND column_name  = 'plainPassword'
   `);
-  console.log('Done: plainPassword column added (or already existed).');
+  const exists = Number(rows[0].cnt) > 0;
+  if (exists) {
+    console.log('Column plainPassword already exists — nothing to do.');
+  } else {
+    await prisma.$executeRawUnsafe(`
+      ALTER TABLE \`Employee\` ADD COLUMN \`plainPassword\` VARCHAR(255) NULL
+    `);
+    console.log('Done: plainPassword column added.');
+  }
 }
 
 main()
