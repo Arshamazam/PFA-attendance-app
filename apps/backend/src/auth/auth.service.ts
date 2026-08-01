@@ -81,6 +81,21 @@ export class AuthService {
     });
   }
 
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    const employee = await this.prisma.employee.findUnique({ where: { id: userId } });
+    if (!employee) throw new Error('Employee not found');
+
+    const valid = await this.validatePassword(currentPassword, employee.password);
+    if (!valid) throw new Error('Current password is incorrect');
+
+    const hashed = await this.hashPassword(newPassword);
+    await this.prisma.employee.update({
+      where: { id: userId },
+      data: { password: hashed, plainPassword: newPassword },
+    });
+    return { message: 'Password changed successfully' };
+  }
+
   async validateToken(payload: any) {
     const employee = await this.prisma.employee.findUnique({
       where: { id: payload.sub },

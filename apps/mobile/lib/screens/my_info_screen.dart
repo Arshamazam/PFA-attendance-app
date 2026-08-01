@@ -396,6 +396,9 @@ class _ActionButtons extends StatelessWidget {
     final confirmCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
     bool isLoading = false;
+    String? errorMessage;
+
+    final auth = context.read<AuthProvider>();
 
     await showModalBottomSheet<void>(
       context: context,
@@ -458,6 +461,21 @@ class _ActionButtons extends StatelessWidget {
                   validator: (v) =>
                       v == newCtrl.text ? null : 'Passwords do not match',
                 ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade50,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.red.shade200),
+                    ),
+                    child: Text(
+                      errorMessage!,
+                      style: GoogleFonts.roboto(fontSize: 13, color: Colors.red.shade700),
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 20),
                 SizedBox(
                   height: 50,
@@ -466,18 +484,24 @@ class _ActionButtons extends StatelessWidget {
                         ? null
                         : () async {
                             if (!formKey.currentState!.validate()) return;
-                            setModal(() => isLoading = true);
-                            await Future.delayed(const Duration(seconds: 1));
-                            setModal(() => isLoading = false);
-                            if (ctx.mounted) Navigator.of(ctx).pop();
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Password changed successfully'),
-                                  backgroundColor: Color(0xFF006B3F),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
+                            setModal(() { isLoading = true; errorMessage = null; });
+                            try {
+                              await auth.changePassword(currentCtrl.text, newCtrl.text);
+                              if (ctx.mounted) Navigator.of(ctx).pop();
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Password changed successfully'),
+                                    backgroundColor: Color(0xFF006B3F),
+                                    behavior: SnackBarBehavior.floating,
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setModal(() {
+                                isLoading = false;
+                                errorMessage = e.toString();
+                              });
                             }
                           },
                     style: ElevatedButton.styleFrom(

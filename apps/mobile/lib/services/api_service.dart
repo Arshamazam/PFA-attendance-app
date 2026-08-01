@@ -230,6 +230,14 @@ class ApiService {
         (data) => data as Map<String, dynamic>? ?? {},
       );
 
+  Future<void> changePassword(String currentPassword, String newPassword) => _request(
+        () => _dio.post('/auth/change-password', data: {
+          'currentPassword': currentPassword,
+          'newPassword': newPassword,
+        }),
+        (_) {},
+      );
+
   /// Fetches only the notifications addressed to the logged-in employee.
   Future<Map<String, dynamic>> getNotifications({int limit = 20}) => _request(
         () => _dio.get('/notifications/my', queryParameters: {'limit': limit}),

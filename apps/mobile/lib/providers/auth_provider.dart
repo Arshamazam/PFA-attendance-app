@@ -89,6 +89,9 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> changePassword(String currentPassword, String newPassword) =>
+      _api.changePassword(currentPassword, newPassword);
+
   Future<void> logout() async {
     await _clearSession();
     notifyListeners();

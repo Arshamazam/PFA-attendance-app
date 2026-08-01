@@ -14,6 +14,7 @@ const SAFE_SELECT = {
   id: true,
   name: true,
   email: true,
+  plainPassword: true,
   role: true,
   fathersName: true,
   cnic: true,
@@ -162,6 +163,7 @@ export class EmployeesService {
         name: dto.name,
         email: dto.email,
         password: hashedPassword,
+        plainPassword: dto.password,
         role: dto.role ?? 'employee',
         fathersName: dto.fathersName,
         cnic: dto.cnic,
@@ -226,7 +228,10 @@ export class EmployeesService {
     // Core
     if (dto.name) data.name = dto.name;
     if (dto.email) data.email = dto.email;
-    if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
+    if (dto.password) {
+      data.password = await bcrypt.hash(dto.password, 10);
+      data.plainPassword = dto.password;
+    }
     if (dto.role && requesterRole === 'admin') data.role = dto.role;
 
     // Personal
