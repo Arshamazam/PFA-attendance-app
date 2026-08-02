@@ -1,8 +1,7 @@
 /**
- * Assign ONLY the Lodhran zone to all 30 Lodhran employees.
- * Replaces any existing zone assignments to ensure correctness.
+ * Fix Lodhran zone coordinates and assign ONLY the Lodhran zone to all 30 employees.
  *
- * Zone: Punjab Food Authority, Lodhran  29.5367, 71.6304
+ * Zone: Punjab Food Authority, Lodhran  29.511830144122364, 71.62803205501027
  *
  * Run on VPS:
  *   DATABASE_URL="mysql://user_pfa_user:Arshamzado%40123@localhost:3306/user_attendance" \
@@ -46,11 +45,17 @@ const EMAILS = [
 ];
 
 async function main() {
-  const zone = await prisma.geofenceZone.findFirst({
+  // Update zone coordinates to exact Google-verified location
+  let zone = await prisma.geofenceZone.findFirst({
     where: { name: { contains: 'Lodhran' } },
   });
   if (!zone) { console.error('Lodhran zone not found.'); process.exit(1); }
-  console.log(`Zone: "${zone.name}"  (${zone.centerLat}, ${zone.centerLng})\n`);
+
+  zone = await prisma.geofenceZone.update({
+    where: { id: zone.id },
+    data: { centerLat: 29.511830144122364, centerLng: 71.62803205501027, radiusMeters: 200, active: true },
+  });
+  console.log(`Zone updated: "${zone.name}"  (${zone.centerLat}, ${zone.centerLng})\n`);
 
   let assigned = 0, notFound = 0;
 
