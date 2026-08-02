@@ -64,27 +64,22 @@ class _CheckInScreenState extends State<CheckInScreen> {
       Position? position;
       if (perm != LocationPermission.denied && perm != LocationPermission.deniedForever) {
         try {
-          // High accuracy (GPS) with 10s timeout — can be slow indoors
+          // High accuracy (GPS) with 30s timeout — WiFi networks slow down GPS lock
           position = await Geolocator.getCurrentPosition(
             locationSettings: const LocationSettings(
               accuracy: LocationAccuracy.high,
-              timeLimit: Duration(seconds: 10),
+              timeLimit: Duration(seconds: 30),
             ),
           );
         } catch (_) {
-          // GPS timed out — try medium accuracy (WiFi/cell towers) for a current fix
-          try {
-            position = await Geolocator.getCurrentPosition(
-              locationSettings: const LocationSettings(
-                accuracy: LocationAccuracy.medium,
-                timeLimit: Duration(seconds: 8),
-              ),
-            );
-          } catch (_) {
-            // Medium also failed — last known position as absolute last resort
-            // (may be stale but better than nothing)
-            position = await Geolocator.getLastKnownPosition();
-          }
+          // GPS timed out — fall back to last known position only
+          // Do NOT use WiFi/cell-tower location: it can be kilometers off and
+          // causes false geofence failures when the employee is actually at the office.
+          position = await Geolocator.getLastKnownPosition();
+        }
+        // Reject any position with accuracy worse than 150m (WiFi/IP-based location)
+        if (position != null && position.accuracy > 150) {
+          position = null;
         }
       }
       _position = position;
