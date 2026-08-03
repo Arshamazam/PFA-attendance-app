@@ -67,11 +67,17 @@ const EMAILS = [
 ];
 
 async function main() {
-  const zone = await prisma.geofenceZone.findFirst({
+  let zone = await prisma.geofenceZone.findFirst({
     where: { name: { contains: 'Gujranwala' } },
   });
   if (!zone) { console.error('Gujranwala zone not found.'); process.exit(1); }
-  console.log(`Zone: "${zone.name}"  (${zone.centerLat}, ${zone.centerLng})\n`);
+
+  // Update to Google Maps-verified coordinates (official PDF coords were ~850m off)
+  zone = await prisma.geofenceZone.update({
+    where: { id: zone.id },
+    data: { centerLat: 32.169926, centerLng: 74.194939, radiusMeters: 200, active: true },
+  });
+  console.log(`Zone updated: "${zone.name}"  (${zone.centerLat}, ${zone.centerLng})\n`);
 
   let assigned = 0, notFound = 0;
 
