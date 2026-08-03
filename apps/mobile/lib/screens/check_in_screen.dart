@@ -212,13 +212,29 @@ class _CheckInScreenState extends State<CheckInScreen> {
     } else {
       try {
         captured = await _cameraCtrl!.takePicture();
-      } catch (e) {
-        _capturing = false;
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Camera error: $e'), backgroundColor: Colors.red),
-        );
-        return;
+      } catch (_) {
+        // Reinitialize camera and retry once before falling back to gallery
+        try {
+          await _cameraCtrl?.dispose();
+          _cameraCtrl = null;
+          await _initCamera();
+          if (_cameraCtrl != null) {
+            captured = await _cameraCtrl!.takePicture();
+          }
+        } catch (_) {}
+        // If retry also failed, fall back to gallery picker
+        if (captured == null) {
+          if (!mounted) { _capturing = false; return; }
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Camera unavailable. Please select a photo from gallery.'),
+              backgroundColor: Colors.orange,
+              duration: Duration(seconds: 3),
+            ),
+          );
+          final picker = ImagePicker();
+          captured = await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+        }
       }
     }
 
