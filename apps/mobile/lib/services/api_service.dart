@@ -65,9 +65,11 @@ class ApiService {
       return _handleResponse(response, parser);
     } on DioException catch (e) {
       final status = e.response?.statusCode;
-      // 401 always means the token is expired/invalid (login failures are now 400)
       if (status == 401) throw const UnauthorizedException();
-      // For all other errors, show the actual message from the response body
+      // 3xx redirect on a POST means the server is momentarily restarting
+      if (status != null && status >= 300 && status < 400) {
+        throw const ApiException('Server is temporarily unavailable. Please try again in a moment.', statusCode: 503);
+      }
       final msg = (e.response?.data is Map)
           ? (e.response!.data as Map)['message']?.toString() ?? e.message ?? 'Request failed'
           : e.message ?? 'Cannot connect to server';
