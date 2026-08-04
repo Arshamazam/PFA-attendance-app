@@ -79,11 +79,17 @@ class AuthProvider extends ChangeNotifier {
     } on ApiException catch (e) {
       _isLoading = false;
       _errorMessage = e.message;
+      _token = null;
+      _user = null;
+      _api.setToken(null);
       notifyListeners();
       return false;
     } catch (e) {
       _isLoading = false;
       _errorMessage = 'Login failed. Please try again.';
+      _token = null;
+      _user = null;
+      _api.setToken(null);
       notifyListeners();
       return false;
     }
