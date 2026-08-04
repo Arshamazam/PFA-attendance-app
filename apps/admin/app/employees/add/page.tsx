@@ -73,7 +73,7 @@ const step3Schema = z.object({
   serviceCadre: z.string().min(1, "Required"),
   grade: z.string().min(1, "Required"),
   salary: z.string().optional(),
-  reportingOfficerId: z.string().min(1, "Required"),
+  reportingOfficerId: z.string().optional().or(z.literal("")),
   shiftType: z.string().min(1, "Required"),
   employmentStatus: z.string().min(1, "Required"),
 });
@@ -125,6 +125,14 @@ const STEPS = [
 const CITIES = ["Lahore", "Islamabad", "Karachi", "Multan", "Faisalabad", "Peshawar", "Quetta", "Rawalpindi", "Sialkot", "Gujranwala"];
 const RELATIONSHIPS = ["Spouse", "Parent", "Sibling", "Child", "Other"];
 const RELIGIONS = ["Islam", "Christianity", "Sikhism", "Hinduism", "Other"];
+const PFA_DISTRICTS = [
+  "LAHORE", "KASUR", "SHEIKHUPURA", "NANKANA", "FAISALABAD", "JHANG",
+  "CHINIOT", "T.T.SINGH", "OKARA", "SAHIWAL", "PAKPATTAN", "MURREE",
+  "RAWALPINDI", "ATTOCK", "CHAKWAL", "JHELUM", "GUJRANWALA", "GUJRAT",
+  "M.B.DIN", "HAFIZABAD", "SIALKOT", "NAROWAL", "BHAKKAR", "MIANWALI",
+  "KHUSHAB", "SARGODHA", "BAHAWALNAGAR", "BAHAWALPUR", "MULTAN", "LODHRAN",
+  "KHANEWAL", "VEHARI", "R.Y.KHAN", "D.G.KHAN", "LAYYAH", "MUZAFFARGARH", "RAJANPUR",
+];
 
 // Fallback values used while the API loads or if it fails
 const FALLBACK_DEPARTMENTS = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad"];
@@ -259,6 +267,7 @@ export default function AddEmployeePage() {
   const photoFileRef = useRef<HTMLInputElement>(null);
   const [step, setStep] = useState(0);
   const [submitting, setSubmitting] = useState(false);
+  const [workDistrict, setWorkDistrict] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
@@ -322,12 +331,13 @@ export default function AddEmployeePage() {
   });
   const zones = Array.isArray(zonesData) ? zonesData : ((zonesData as unknown as { data?: unknown[] })?.data ?? []);
 
-  // Fetch managers
-  const { data: managersData } = useQuery({
-    queryKey: ["managers"],
-    queryFn: () => api.get("/employees?limit=100").then((r) => (r.data as { data: { id: string; name: string; role: string }[] }).data),
+  // Fetch employees for reporting officer — filtered by selected district
+  const { data: districtEmployeesData } = useQuery({
+    queryKey: ["employees-by-district", workDistrict],
+    queryFn: () => api.get(`/employees?department=${encodeURIComponent(workDistrict)}&limit=300`).then((r) => (r.data as { data: { id: string; name: string; designation: string }[] }).data),
+    enabled: !!workDistrict,
   });
-  const managers = (managersData ?? []).filter((m: { role: string }) => ["manager", "admin"].includes(m.role));
+  const districtEmployees = districtEmployeesData ?? [];
 
   const validateStep = (s: number) => {
     const data = getValues();
@@ -485,14 +495,23 @@ export default function AddEmployeePage() {
           <Field label="Basic Salary (PKR)" error={errors.salary?.message}>
             <Input {...register("salary")} type="number" placeholder="50000" className="h-9 border-gray-200" />
           </Field>
-          <Field label="Reporting Officer" required error={errors.reportingOfficerId?.message}>
+          <Field label="District" error={undefined}>
+            <SearchableSelect
+              value={workDistrict}
+              onChange={(v) => { setWorkDistrict(v); setValue("reportingOfficerId", "", { shouldValidate: false }); }}
+              options={PFA_DISTRICTS}
+              placeholder="Select district…"
+              searchPlaceholder="Search district…"
+            />
+          </Field>
+          <Field label="Reporting Officer" error={errors.reportingOfficerId?.message}>
             <SearchableSelect
               value={watched.reportingOfficerId ?? ""}
               onChange={(v) => setValue("reportingOfficerId", v, { shouldValidate: true })}
-              options={managers.length
-                ? managers.map((m: { id: string; name: string; role: string }) => ({ value: m.id, label: m.name, sub: m.role }))
+              options={districtEmployees.length
+                ? districtEmployees.map((e: { id: string; name: string; designation: string }) => ({ value: e.id, label: e.name, sub: e.designation }))
                 : []}
-              placeholder="Search & select manager…"
+              placeholder={workDistrict ? "Search & select officer…" : "Select a district first…"}
               searchPlaceholder="Search by name…"
               error={!!errors.reportingOfficerId}
             />
