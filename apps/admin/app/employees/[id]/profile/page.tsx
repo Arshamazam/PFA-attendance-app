@@ -13,7 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, Printer, ArrowLeftRight, ArrowRight, FileText, Download, ExternalLink, Star } from "lucide-react";
+import { ArrowLeft, Pencil, Printer, ArrowLeftRight, ArrowRight, FileText, Download, ExternalLink, Star, KeyRound, Eye, EyeOff } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 const DEPARTMENTS = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad"];
@@ -85,6 +85,10 @@ export default function EmployeeProfilePage() {
   const [reviewDate, setReviewDate]       = useState(format(new Date(), "yyyy-MM-dd"));
   const [reviewPeriod, setReviewPeriod]   = useState("");
 
+  const [resetPwOpen, setResetPwOpen] = useState(false);
+  const [newPw, setNewPw]             = useState("");
+  const [showNewPw, setShowNewPw]     = useState(false);
+
   const { data: emp, isLoading } = useQuery<EmpDetail>({
     queryKey: ["employee", id],
     queryFn: () => api.get(`/employees/${id}`).then((r) => r.data as EmpDetail),
@@ -117,6 +121,16 @@ export default function EmployeeProfilePage() {
       qc.invalidateQueries({ queryKey: ["transfers-summary"] });
     },
     onError: () => toast.error("Failed to submit transfer request"),
+  });
+
+  const resetPassword = useMutation({
+    mutationFn: () => api.patch(`/employees/${id}/reset-password`, { newPassword: newPw }),
+    onSuccess: () => {
+      toast.success("Password reset successfully");
+      setResetPwOpen(false);
+      setNewPw("");
+    },
+    onError: () => toast.error("Failed to reset password"),
   });
 
   const createReview = useMutation({
@@ -187,6 +201,14 @@ export default function EmployeeProfilePage() {
           }}
         >
           <ArrowLeftRight className="w-4 h-4" /> Transfer
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-2 rounded-xl border-red-200 text-red-600 hover:bg-red-50"
+          onClick={() => { setNewPw(""); setShowNewPw(false); setResetPwOpen(true); }}
+        >
+          <KeyRound className="w-4 h-4" /> Reset Password
         </Button>
         <Button
           size="sm"
@@ -607,6 +629,80 @@ export default function EmployeeProfilePage() {
                   <Star size={14} />
                 )}
                 Create Review
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Reset Password Dialog ─────────────────── */}
+      <Dialog open={resetPwOpen} onOpenChange={setResetPwOpen}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              <KeyRound size={16} className="text-red-500" />
+              Reset Password
+            </DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (newPw.length < 6) { toast.error("Password must be at least 6 characters"); return; }
+              resetPassword.mutate();
+            }}
+            className="space-y-4 mt-1"
+          >
+            <div className="bg-gray-50 rounded-xl px-4 py-3 flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-red-50 flex items-center justify-center text-red-600 text-sm font-bold shrink-0">
+                {emp.name.slice(0, 2).toUpperCase()}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-800">{emp.name}</p>
+                <p className="text-xs text-gray-400">{emp.email}</p>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                New Password <span className="text-red-500">*</span>
+              </Label>
+              <div className="relative">
+                <Input
+                  type={showNewPw ? "text" : "password"}
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  placeholder="Enter new password"
+                  className="h-10 rounded-xl text-sm pr-10"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPw(!showNewPw)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  {showNewPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {newPw && (
+                <p className="text-xs text-green-600 font-mono bg-green-50 px-2 py-1 rounded-lg">
+                  New password: {newPw}
+                </p>
+              )}
+            </div>
+            <DialogFooter className="gap-2 pt-1">
+              <Button type="button" variant="outline" className="rounded-xl" onClick={() => setResetPwOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={resetPassword.isPending || newPw.length < 6}
+                className="bg-red-600 hover:bg-red-700 text-white rounded-xl gap-2"
+              >
+                {resetPassword.isPending ? (
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                ) : (
+                  <KeyRound size={14} />
+                )}
+                Reset Password
               </Button>
             </DialogFooter>
           </form>

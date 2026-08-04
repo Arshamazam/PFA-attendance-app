@@ -333,6 +333,22 @@ export class EmployeesService {
     return updated;
   }
 
+  async resetPassword(id: string, newPassword: string) {
+    const employee = await this.prisma.employee.findFirst({
+      where: { id, deletedAt: null },
+    });
+    if (!employee) throw new NotFoundException(`Employee ${id} not found`);
+
+    const hashed = await bcrypt.hash(newPassword, 10);
+    await this.prisma.employee.update({
+      where: { id },
+      data: { password: hashed, plainPassword: newPassword },
+    });
+
+    this.logger.log(`Password reset for employee: ${id}`);
+    return { message: 'Password reset successfully' };
+  }
+
   async remove(id: string) {
     const employee = await this.prisma.employee.findFirst({
       where: { id, deletedAt: null },

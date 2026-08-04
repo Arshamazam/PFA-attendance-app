@@ -106,6 +106,15 @@ export class EmployeesController {
     return this.employeesService.update(id, dto, user.id, user.role);
   }
 
+  @Patch(':id/reset-password')
+  @Roles('admin', 'super_admin')
+  resetPassword(
+    @Param('id') id: string,
+    @Body() body: { newPassword: string },
+  ) {
+    return this.employeesService.resetPassword(id, body.newPassword);
+  }
+
   @Delete(':id')
   @Roles('admin')
   remove(@Param('id') id: string) {
