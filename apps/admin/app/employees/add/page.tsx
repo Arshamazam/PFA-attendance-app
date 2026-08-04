@@ -57,13 +57,13 @@ const step2Schema = z.object({
   email: z.string().email("Invalid email"),
   mobilePhone: z.string().regex(pkPhoneRegex, "Format: +92XXXXXXXXXX or 03XXXXXXXXX"),
   landlinePhone: z.string().optional(),
-  addressStreet: z.string().min(2, "Required"),
-  addressCity: z.string().min(1, "Required"),
-  addressDistrict: z.string().min(2, "Required"),
-  addressPostalCode: z.string().regex(/^\d{5}$/, "5-digit postal code"),
-  emergencyContactName: z.string().min(2, "Required"),
-  emergencyContactPhone: z.string().regex(pkPhoneRegex, "Format: +92XXXXXXXXXX or 03XXXXXXXXX"),
-  emergencyContactRel: z.string().min(1, "Required"),
+  addressStreet: z.string().optional(),
+  addressCity: z.string().optional(),
+  addressDistrict: z.string().optional(),
+  addressPostalCode: z.string().regex(/^\d{5}$/, "5-digit postal code").optional().or(z.literal("")),
+  emergencyContactName: z.string().optional(),
+  emergencyContactPhone: z.string().regex(pkPhoneRegex, "Format: +92XXXXXXXXXX or 03XXXXXXXXX").optional().or(z.literal("")),
+  emergencyContactRel: z.string().optional(),
 });
 
 const step3Schema = z.object({
@@ -436,17 +436,17 @@ export default function AddEmployeePage() {
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Home Address</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div className="md:col-span-2">
-            <Field label="Street Address" required error={errors.addressStreet?.message}>
+            <Field label="Street Address" error={errors.addressStreet?.message}>
               <Input {...register("addressStreet")} placeholder="House 12, Street 4, Model Town" className="h-9 border-gray-200" />
             </Field>
           </div>
-          <Field label="City" required error={errors.addressCity?.message}>
+          <Field label="City" error={errors.addressCity?.message}>
             <SearchableSelect value={watched.addressCity ?? ""} onChange={(v) => setValue("addressCity", v, { shouldValidate: true })} options={CITIES} placeholder="Select city" searchPlaceholder="Search city…" error={!!errors.addressCity} />
           </Field>
-          <Field label="District" required error={errors.addressDistrict?.message}>
+          <Field label="District" error={errors.addressDistrict?.message}>
             <Input {...register("addressDistrict")} placeholder="Lahore" className="h-9 border-gray-200" />
           </Field>
-          <Field label="Postal Code" required error={errors.addressPostalCode?.message}>
+          <Field label="Postal Code" error={errors.addressPostalCode?.message}>
             <Input {...register("addressPostalCode")} placeholder="54000" maxLength={5} className="h-9 border-gray-200 font-mono" />
           </Field>
         </div>
@@ -455,13 +455,13 @@ export default function AddEmployeePage() {
       <div>
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Emergency Contact</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          <Field label="Contact Name" required error={errors.emergencyContactName?.message}>
+          <Field label="Contact Name" error={errors.emergencyContactName?.message}>
             <Input {...register("emergencyContactName")} placeholder="Full name" className="h-9 border-gray-200" />
           </Field>
-          <Field label="Contact Phone" required error={errors.emergencyContactPhone?.message}>
+          <Field label="Contact Phone" error={errors.emergencyContactPhone?.message}>
             <Input {...register("emergencyContactPhone")} placeholder="+923001234567" className="h-9 border-gray-200 font-mono" />
           </Field>
-          <Field label="Relationship" required error={errors.emergencyContactRel?.message}>
+          <Field label="Relationship" error={errors.emergencyContactRel?.message}>
             <Sel value={watched.emergencyContactRel ?? ""} onChange={(v) => setValue("emergencyContactRel", v, { shouldValidate: true })} options={RELATIONSHIPS} />
           </Field>
         </div>
