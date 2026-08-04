@@ -38,11 +38,17 @@ const EMAILS = [
 ];
 
 async function main() {
-  const zone = await prisma.geofenceZone.findFirst({
+  let zone = await prisma.geofenceZone.findFirst({
     where: { name: { contains: 'Sialkot' } },
   });
   if (!zone) { console.error('Sialkot zone not found.'); process.exit(1); }
-  console.log(`Zone: "${zone.name}"  (${zone.centerLat}, ${zone.centerLng})\n`);
+
+  // Update to Google Maps-verified coordinates
+  zone = await prisma.geofenceZone.update({
+    where: { id: zone.id },
+    data: { centerLat: 32.498901, centerLng: 74.524384, radiusMeters: 200, active: true },
+  });
+  console.log(`Zone updated: "${zone.name}"  (${zone.centerLat}, ${zone.centerLng})\n`);
 
   let assigned = 0, notFound = 0;
 
