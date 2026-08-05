@@ -661,8 +661,8 @@ export default function AddEmployeePage() {
       <div>
         <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Document Uploads</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-          <FileUpload label="CNIC Copy" required value={uploads.cnicCopyUrl} onUpload={(url) => setUploads((u) => ({ ...u, cnicCopyUrl: url }))} />
-          <FileUpload label="Degree Certificate" required value={uploads.degreeCertificateUrl} onUpload={(url) => setUploads((u) => ({ ...u, degreeCertificateUrl: url }))} />
+          <FileUpload label="CNIC Copy" value={uploads.cnicCopyUrl} onUpload={(url) => setUploads((u) => ({ ...u, cnicCopyUrl: url }))} />
+          <FileUpload label="Degree Certificate" value={uploads.degreeCertificateUrl} onUpload={(url) => setUploads((u) => ({ ...u, degreeCertificateUrl: url }))} />
           <FileUpload label="Medical Certificate" value={uploads.medicalCertificateUrl} onUpload={(url) => setUploads((u) => ({ ...u, medicalCertificateUrl: url }))} />
         </div>
       </div>
