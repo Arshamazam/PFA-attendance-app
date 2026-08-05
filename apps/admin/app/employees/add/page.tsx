@@ -67,15 +67,15 @@ const step2Schema = z.object({
 });
 
 const step3Schema = z.object({
-  dateOfJoining: z.string().refine((d) => new Date(d) <= new Date(), "Cannot be a future date"),
-  department: z.string().min(1, "Required"),
-  designation: z.string().min(1, "Required"),
-  serviceCadre: z.string().min(1, "Required"),
-  grade: z.string().min(1, "Required"),
+  dateOfJoining: z.string().optional().refine((d) => !d || new Date(d) <= new Date(), "Cannot be a future date"),
+  department: z.string().optional().or(z.literal("")),
+  designation: z.string().optional().or(z.literal("")),
+  serviceCadre: z.string().optional().or(z.literal("")),
+  grade: z.string().optional().or(z.literal("")),
   salary: z.string().optional(),
   reportingOfficerId: z.string().optional().or(z.literal("")),
-  shiftType: z.string().min(1, "Required"),
-  employmentStatus: z.string().min(1, "Required"),
+  shiftType: z.string().optional().or(z.literal("")),
+  employmentStatus: z.string().optional().or(z.literal("")),
 });
 
 const step4Schema = z.object({
@@ -485,19 +485,19 @@ export default function AddEmployeePage() {
           <Field label="Employee ID (Auto-generated)" error={undefined}>
             <Input value={empCode} readOnly className="h-9 border-gray-200 bg-gray-50 font-mono text-gray-500 cursor-not-allowed" />
           </Field>
-          <Field label="Date of Joining" required error={errors.dateOfJoining?.message}>
+          <Field label="Date of Joining" error={errors.dateOfJoining?.message}>
             <Input {...register("dateOfJoining")} type="date" max={new Date().toISOString().split("T")[0]} className="h-9 border-gray-200" />
           </Field>
-          <Field label="Department" required error={errors.department?.message}>
+          <Field label="Department" error={errors.department?.message}>
             <SearchableSelect value={watched.department ?? ""} onChange={(v) => setValue("department", v, { shouldValidate: true })} options={DEPARTMENTS} placeholder="Select department" searchPlaceholder="Search department…" error={!!errors.department} />
           </Field>
-          <Field label="Designation / Position" required error={errors.designation?.message}>
+          <Field label="Designation / Position" error={errors.designation?.message}>
             <SearchableSelect value={watched.designation ?? ""} onChange={(v) => setValue("designation", v, { shouldValidate: true })} options={DESIGNATIONS} placeholder="Select designation" searchPlaceholder="Search designation…" error={!!errors.designation} />
           </Field>
-          <Field label="Service Cadre" required error={errors.serviceCadre?.message}>
+          <Field label="Service Cadre" error={errors.serviceCadre?.message}>
             <Sel value={watched.serviceCadre ?? ""} onChange={(v) => setValue("serviceCadre", v, { shouldValidate: true })} options={CADRES} />
           </Field>
-          <Field label="Grade / Level" required error={errors.grade?.message}>
+          <Field label="Grade / Level" error={errors.grade?.message}>
             <SearchableSelect value={watched.grade ?? ""} onChange={(v) => setValue("grade", v, { shouldValidate: true })} options={GRADES} placeholder="Select grade" searchPlaceholder="Search grade…" error={!!errors.grade} />
           </Field>
           <Field label="Basic Salary (PKR)" error={errors.salary?.message}>
@@ -524,10 +524,10 @@ export default function AddEmployeePage() {
               error={!!errors.reportingOfficerId}
             />
           </Field>
-          <Field label="Shift Type" required error={errors.shiftType?.message}>
+          <Field label="Shift Type" error={errors.shiftType?.message}>
             <Sel value={watched.shiftType ?? ""} onChange={(v) => setValue("shiftType", v, { shouldValidate: true })} options={SHIFTS} />
           </Field>
-          <Field label="Employment Status" required error={errors.employmentStatus?.message}>
+          <Field label="Employment Status" error={errors.employmentStatus?.message}>
             <Sel value={watched.employmentStatus ?? "Active"} onChange={(v) => setValue("employmentStatus", v, { shouldValidate: true })} options={EMP_STATUSES} />
           </Field>
         </div>
