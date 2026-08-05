@@ -149,16 +149,17 @@ export default function LeavesPage() {
                 <TableHead className="text-xs font-semibold">Days</TableHead>
                 <TableHead className="text-xs font-semibold">Reason</TableHead>
                 <TableHead className="text-xs font-semibold">Status</TableHead>
+                <TableHead className="text-xs font-semibold">Reviewed by</TableHead>
                 <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: 7 }).map((__, j) => (<TableCell key={j}><div className="h-4 bg-gray-100 rounded animate-pulse" /></TableCell>))}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 8 }).map((__, j) => (<TableCell key={j}><div className="h-4 bg-gray-100 rounded animate-pulse" /></TableCell>))}</TableRow>
                 ))
               ) : filtered.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center py-12 text-gray-400">No leave requests found</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-12 text-gray-400">No leave requests found</TableCell></TableRow>
               ) : (
                 filtered.map((leave) => {
                   const days = differenceInCalendarDays(parseISO(leave.endDate), parseISO(leave.startDate)) + 1;
@@ -173,6 +174,9 @@ export default function LeavesPage() {
                       <TableCell className="text-sm font-medium">{days}d</TableCell>
                       <TableCell className="text-sm text-gray-600 max-w-[180px]"><p className="truncate">{leave.reason}</p></TableCell>
                       <TableCell>{statusBadge(leave.status)}</TableCell>
+                      <TableCell className="text-sm text-gray-500">
+                        {leave.approver?.name ?? (leave.status !== "pending" ? <span className="text-gray-300">—</span> : null)}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-1">
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-gray-600" title="View" onClick={() => setViewTarget(leave)}>
@@ -248,6 +252,23 @@ export default function LeavesPage() {
                 ))}
               </div>
               <div><Label className="text-xs text-gray-400">Reason</Label><p className="text-sm mt-1">{viewTarget.reason}</p></div>
+              {/* Reviewed by (when not pending) */}
+              {viewTarget.status !== "pending" && (
+                <div className={`rounded-lg p-3 text-sm ${viewTarget.status === "approved" ? "bg-green-50 border border-green-100" : "bg-red-50 border border-red-100"}`}>
+                  <p className="text-xs font-semibold uppercase tracking-wide mb-1.5 text-gray-500">
+                    {viewTarget.status === "approved" ? "✓ Approved" : "✕ Rejected"}
+                  </p>
+                  {viewTarget.approver?.name && (
+                    <p className="font-medium text-gray-800">Reviewed by: <span className="font-semibold">{viewTarget.approver.name}</span></p>
+                  )}
+                  {(viewTarget as any).approvedAt && (
+                    <p className="text-xs text-gray-400 mt-0.5">{format(parseISO((viewTarget as any).approvedAt), "dd MMM yyyy, h:mm a")}</p>
+                  )}
+                  {viewTarget.status === "rejected" && (viewTarget as any).rejectionReason && (
+                    <p className="text-red-700 text-xs mt-1.5 italic">Reason: {(viewTarget as any).rejectionReason}</p>
+                  )}
+                </div>
+              )}
               {viewTarget.status === "pending" && (
                 <div className="flex gap-3 pt-2">
                   <Button className="flex-1 bg-[#006B3F] hover:bg-[#005530] text-white gap-2" onClick={() => { setViewTarget(null); setActionTarget({ leave: viewTarget, action: "approve" }); setNotes(""); }}>

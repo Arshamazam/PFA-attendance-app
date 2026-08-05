@@ -99,7 +99,10 @@ export class LeaveService {
     const [requests, total] = await Promise.all([
       this.prisma.leaveRequest.findMany({
         where,
-        include: { employee: { select: EMPLOYEE_SELECT } },
+        include: {
+          employee: { select: EMPLOYEE_SELECT },
+          approver: { select: { id: true, name: true } },
+        },
         skip,
         take: limit,
         orderBy: { createdAt: 'desc' },
@@ -124,7 +127,10 @@ export class LeaveService {
     const [requests, total] = await Promise.all([
       this.prisma.leaveRequest.findMany({
         where,
-        include: { employee: { select: EMPLOYEE_SELECT } },
+        include: {
+          employee: { select: EMPLOYEE_SELECT },
+          approver: { select: { id: true, name: true } },
+        },
         skip,
         take: limit,
         orderBy: { createdAt: 'asc' },
@@ -164,16 +170,20 @@ export class LeaveService {
     return { data, total, page, limit };
   }
 
-  /** History of requests this officer approved or rejected */
+  /** History of requests from this officer's queue (approved/rejected by anyone) */
   async getMyApprovals(officerId: string, status?: string, page = 1, limit = 50) {
     const skip = (page - 1) * limit;
-    const where: Record<string, unknown> = { approvedBy: officerId };
+    const where: Record<string, unknown> = { reportingOfficerId: officerId };
     if (status && status !== 'all') where.status = status;
+    else where.status = { in: ['approved', 'rejected'] };
 
     const [requests, total] = await Promise.all([
       this.prisma.leaveRequest.findMany({
         where,
-        include: { employee: { select: EMPLOYEE_SELECT } },
+        include: {
+          employee: { select: EMPLOYEE_SELECT },
+          approver: { select: { id: true, name: true } },
+        },
         skip,
         take: limit,
         orderBy: { approvedAt: 'desc' },

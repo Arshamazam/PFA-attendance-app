@@ -697,8 +697,21 @@ class _HistoryCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
-                    if (leave.approvedAt != null) ...[
+                    if (leave.approvedByName != null) ...[
                       const SizedBox(height: 4),
+                      Text(
+                        '${approved ? 'Approved' : 'Rejected'} by ${leave.approvedByName}',
+                        style: GoogleFonts.roboto(
+                          fontSize: 11,
+                          color: statusColor,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                    if (leave.approvedAt != null) ...[
+                      const SizedBox(height: 2),
                       Text(
                         fmtDateTime(leave.approvedAt!),
                         style: GoogleFonts.roboto(fontSize: 11, color: Colors.grey.shade400),
