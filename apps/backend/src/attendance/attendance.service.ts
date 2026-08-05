@@ -42,6 +42,14 @@ export class AttendanceService {
     return new Date(pktDate.getTime() - 5 * 60 * 60 * 1000);
   }
 
+  private isOnTime(checkInUtc: Date, shift: string | null): boolean {
+    const pkt = new Date(checkInUtc.getTime() + 5 * 60 * 60 * 1000);
+    const totalMinutes = pkt.getUTCHours() * 60 + pkt.getUTCMinutes();
+    return shift === 'evening'
+      ? totalMinutes <= 17 * 60 + 30  // ≤ 5:30 PM PKT
+      : totalMinutes <= 9 * 60 + 30;  // ≤ 9:30 AM PKT (morning or unknown)
+  }
+
   // Derive attendance status from shift and check-in time.
   // Morning: on_time before 09:30 PKT, late after. Evening: on_time before 17:30 PKT, late after.
   private resolveStatus(checkInUtc: Date, shift: string | null, lateReason?: string): string {
@@ -289,10 +297,7 @@ export class AttendanceService {
       return { h: pkt.getUTCHours(), m: pkt.getUTCMinutes() };
     };
 
-    const onTime = records.filter((r) => {
-      const { h, m } = pktHour(r.checkInTime);
-      return h < 9 || (h === 9 && m <= 30);
-    }).length;
+    const onTime = records.filter((r) => this.isOnTime(r.checkInTime, r.shift)).length;
 
     const avgMins =
       records.length > 0
@@ -308,8 +313,7 @@ export class AttendanceService {
     for (const r of records) {
       const dept = r.employee?.department ?? 'Unknown';
       if (!byDept[dept]) byDept[dept] = { onTime: 0, late: 0 };
-      const { h, m } = pktHour(r.checkInTime);
-      if (h < 9 || (h === 9 && m <= 30)) byDept[dept].onTime++;
+      if (this.isOnTime(r.checkInTime, r.shift)) byDept[dept].onTime++;
       else byDept[dept].late++;
     }
 
@@ -346,7 +350,7 @@ export class AttendanceService {
 
     const records = await this.prisma.attendance.findMany({
       where: attWhere,
-      select: { checkInTime: true },
+      select: { checkInTime: true, shift: true },
     });
 
     const byDay: Record<string, { date: string; total: number; onTime: number; late: number }> = {};
@@ -362,9 +366,7 @@ export class AttendanceService {
       const key = pkt.toISOString().split('T')[0];
       if (!byDay[key]) continue;
       byDay[key].total++;
-      const h = pkt.getUTCHours();
-      const m = pkt.getUTCMinutes();
-      if (h < 9 || (h === 9 && m === 0)) byDay[key].onTime++;
+      if (this.isOnTime(r.checkInTime, r.shift)) byDay[key].onTime++;
       else byDay[key].late++;
     }
     return Object.values(byDay);
