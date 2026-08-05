@@ -31,6 +31,7 @@ interface EmpDetail {
   profilePhotoUrl?: string | null;
   cnicCopyUrl?: string; degreeCertificateUrl?: string; medicalCertificateUrl?: string;
   active?: boolean; createdAt?: string;
+  plainPassword?: string;
 }
 
 interface Transfer {
@@ -85,9 +86,10 @@ export default function EmployeeProfilePage() {
   const [reviewDate, setReviewDate]       = useState(format(new Date(), "yyyy-MM-dd"));
   const [reviewPeriod, setReviewPeriod]   = useState("");
 
-  const [resetPwOpen, setResetPwOpen] = useState(false);
-  const [newPw, setNewPw]             = useState("");
-  const [showNewPw, setShowNewPw]     = useState(false);
+  const [resetPwOpen, setResetPwOpen]     = useState(false);
+  const [newPw, setNewPw]                 = useState("");
+  const [showNewPw, setShowNewPw]         = useState(false);
+  const [showCurrentPw, setShowCurrentPw] = useState(false);
 
   const { data: emp, isLoading } = useQuery<EmpDetail>({
     queryKey: ["employee", id],
@@ -334,6 +336,23 @@ export default function EmployeeProfilePage() {
 
         <Section title="Contact Information">
           <Row label="Email" value={emp.email} />
+          {emp.plainPassword && (
+            <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide w-36 shrink-0">Current Password</span>
+              <div className="flex items-center gap-2 flex-1 justify-end">
+                <span className="text-sm text-gray-800 font-mono">
+                  {showCurrentPw ? emp.plainPassword : "••••••••"}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPw(!showCurrentPw)}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+          )}
           <Row label="Mobile Phone" value={emp.mobilePhone} />
           <Row label="Landline" value={emp.landlinePhone} />
           <Row label="Street" value={emp.addressStreet} />
