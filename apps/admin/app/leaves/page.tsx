@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -34,18 +34,26 @@ export default function LeavesPage() {
   const qc = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("pending");
+
+  // Debounce search — wait 400 ms after typing stops before firing request
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
   const [viewTarget, setViewTarget] = useState<LeaveRequest | null>(null);
   const [actionTarget, setActionTarget] = useState<{ leave: LeaveRequest; action: "approve" | "reject" } | null>(null);
   const [notes, setNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
 
+  const searchParam = debouncedSearch.trim() ? `&search=${encodeURIComponent(debouncedSearch.trim())}` : "";
   const endpoint = statusFilter === "pending"
-    ? `/leave/pending?page=${page}&limit=${LIMIT}`
-    : `/leave/my-requests?page=${page}&limit=${LIMIT}`;
+    ? `/leave/pending?page=${page}&limit=${LIMIT}${searchParam}`
+    : `/leave/all?page=${page}&limit=${LIMIT}${searchParam}`;
 
   const { data, isLoading } = useQuery({
-    queryKey: ["leaves", page, statusFilter],
+    queryKey: ["leaves", page, statusFilter, debouncedSearch],
     queryFn: () => api.get<PaginatedResponse<LeaveRequest>>(endpoint).then((r) => r.data),
     placeholderData: (prev) => prev,
   });
@@ -56,7 +64,7 @@ export default function LeavesPage() {
     queryFn: () => api.get<PaginatedResponse<LeaveRequest>>("/leave/pending?limit=1").then((r) => r.data.total),
   });
 
-  const filtered = (data?.data ?? []).filter((l) => l.employee?.name?.toLowerCase().includes(search.toLowerCase()));
+  const filtered = data?.data ?? [];
   const total = data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
@@ -117,7 +125,7 @@ export default function LeavesPage() {
           <div className="flex gap-2">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-              <Input placeholder="Search by employee..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 w-52" />
+              <Input placeholder="Search name or email…" value={search} onChange={(e) => setSearch(e.target.value)} className="pl-9 h-9 w-64" />
             </div>
             <Select value={statusFilter} onValueChange={(v) => { if (v) { setStatusFilter(v); setPage(1); } }}>
               <SelectTrigger className="w-32 h-9 border-2 border-gray-300 hover:border-gray-400 focus-visible:border-[#006B3F] focus-visible:ring-2 focus-visible:ring-[#006B3F]/20"><SelectValue /></SelectTrigger>

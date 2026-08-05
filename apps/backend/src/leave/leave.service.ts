@@ -83,10 +83,18 @@ export class LeaveService {
   }
 
   /** All pending requests — for admin panel */
-  async getAllRequests(page = 1, limit = 20, status?: string) {
+  async getAllRequests(page = 1, limit = 20, status?: string, search?: string) {
     const skip = (page - 1) * limit;
     const where: Record<string, unknown> = {};
     if (status) where.status = status;
+    if (search?.trim()) {
+      where.employee = {
+        OR: [
+          { name:  { contains: search.trim() } },
+          { email: { contains: search.trim() } },
+        ],
+      };
+    }
     const [requests, total] = await Promise.all([
       this.prisma.leaveRequest.findMany({
         where,
@@ -101,17 +109,26 @@ export class LeaveService {
     return { data, total, page, limit };
   }
 
-  async getPendingRequests(page = 1, limit = 20) {
+  async getPendingRequests(page = 1, limit = 20, search?: string) {
     const skip = (page - 1) * limit;
+    const where: Record<string, unknown> = { status: 'pending' };
+    if (search?.trim()) {
+      where.employee = {
+        OR: [
+          { name:  { contains: search.trim() } },
+          { email: { contains: search.trim() } },
+        ],
+      };
+    }
     const [requests, total] = await Promise.all([
       this.prisma.leaveRequest.findMany({
-        where: { status: 'pending' },
+        where,
         include: { employee: { select: EMPLOYEE_SELECT } },
         skip,
         take: limit,
         orderBy: { createdAt: 'asc' },
       }),
-      this.prisma.leaveRequest.count({ where: { status: 'pending' } }),
+      this.prisma.leaveRequest.count({ where }),
     ]);
 
     const data = requests.map((r) => ({

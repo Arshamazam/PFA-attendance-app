@@ -68,21 +68,28 @@ export class LeaveController {
     @Query('status') status?: string,
     @Query('page') page?: string,
     @Query('limit') limit?: string,
+    @Query('search') search?: string,
   ) {
     return this.leaveService.getAllRequests(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 200,
       status,
+      search,
     );
   }
 
   /** All pending — for admin panel */
   @Get('pending')
   @Roles('admin', 'manager', 'super_admin')
-  getPendingRequests(@Query('page') page?: string, @Query('limit') limit?: string) {
+  getPendingRequests(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('search') search?: string,
+  ) {
     return this.leaveService.getPendingRequests(
       page ? parseInt(page, 10) : 1,
       limit ? parseInt(limit, 10) : 20,
+      search,
     );
   }
 
