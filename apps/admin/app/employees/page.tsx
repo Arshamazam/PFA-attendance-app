@@ -18,7 +18,15 @@ import { format, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
-const DESIGNATIONS = ["All", "Food Inspector", "Senior Inspector", "Supervisor", "Manager", "Admin", "Other"];
+const DESIGNATIONS = [
+  "All", "Deputy Director (Operations)", "Food Safety Officer", "Veterinary Specialist",
+  "Dairy Technologist", "Assistant Food Safety Officer", "Senior Clerk", "Junior Clerk",
+  "Driver", "Naib Qasid", "Junior Computer Operator", "Daak Rider", "Security Guard",
+  "Chowkidar", "Sweeper", "Accountant", "Computer Operator", "IT Coordinator", "Analyst",
+  "Lab Attendant", "Electrician", "Sanitary Worker", "IT Administrator",
+  "Admin Trainee (Skilled-JCO)", "Admin Trainee (Skilled-DR)", "Admin Trainee (Skilled-EN)",
+  "Admin Trainee (Unskilled)", "Consultant", "Food Safety Trainee Officer",
+];
 const LIMITS = [10, 25, 50];
 
 type SortKey = "name" | "email" | "employeeCode" | "designation" | "department" | "createdAt";
