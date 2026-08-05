@@ -25,6 +25,14 @@ const SHIFTS       = ["Day", "Night", "Rotation"];
 const EMP_STATUSES = ["Active", "On Leave", "Suspended", "Retired"];
 const RELIGIONS    = ["Islam", "Christianity", "Sikhism", "Hinduism", "Other"];
 const CITIES       = ["Lahore", "Islamabad", "Karachi", "Multan", "Faisalabad", "Peshawar", "Quetta", "Rawalpindi", "Sialkot", "Gujranwala", "Hyderabad", "Bahawalpur"];
+const PFA_DISTRICTS = [
+  "Lahore", "Kasur", "Sheikhupura", "Nankana", "Faisalabad", "Jhang",
+  "Chiniot", "T.T.Singh", "Okara", "Sahiwal", "Pakpattan", "Murree",
+  "Rawalpindi", "Attock", "Chakwal", "Jehlum", "Gujranwala", "Gujrat",
+  "M.B.Din", "Hafizabad", "Sialkot", "Narowal", "Bhakkar", "Mianwali",
+  "Khushab", "Sargodha", "Bahawalnagar", "Bahawalpur", "Multan", "Lodhran",
+  "Khanewal", "Vehari", "R.Y.Khan", "D.G.Khan", "Layyah", "Muzaffargarh", "Rajanpur",
+];
 const ROLES        = [
   { value: "employee", label: "Employee", sub: "Can view own data only" },
   { value: "manager",  label: "Manager",  sub: "Can approve leaves, view team" },
@@ -98,6 +106,7 @@ export default function EditEmployeePage() {
   const [activeSection,    setActiveSection]    = useState("personal");
   const [form,             setForm]             = useState<Form>({});
   const [loaded,           setLoaded]           = useState(false);
+  const [reportingDistrict, setReportingDistrict] = useState("");
   const [photoPreview,     setPhotoPreview]     = useState<string | null>(null);
   const [uploadingPhoto,   setUploadingPhoto]   = useState(false);
   const [uploadingDoc,     setUploadingDoc]     = useState<Record<string, boolean>>({});
@@ -108,12 +117,17 @@ export default function EditEmployeePage() {
     queryFn:  () => api.get(`/employees/${id}`).then((r) => r.data as Form),
   });
 
-  // Fetch managers/admins for Reporting Officer dropdown
+  // Fetch employees for Reporting Officer — filtered by selected district
   const { data: managersData } = useQuery({
-    queryKey: ["managers-list"],
-    queryFn:  () => api.get("/employees?limit=10000").then((r) =>
-      (r.data as { data: { id: string; name: string; role: string; designation?: string }[] }).data
-    ),
+    queryKey: ["managers-by-district", reportingDistrict],
+    queryFn:  () => {
+      const url = reportingDistrict
+        ? `/employees?department=${encodeURIComponent(reportingDistrict)}&limit=300`
+        : `/employees?limit=300`;
+      return api.get(url).then((r) =>
+        (r.data as { data: { id: string; name: string; role: string; designation?: string }[] }).data
+      );
+    },
   });
   const managers = (managersData ?? [])
     .map((m) => ({ value: m.id, label: m.name, sub: m.designation ?? m.role }));
@@ -186,6 +200,7 @@ export default function EditEmployeePage() {
       });
       setForm(f);
       if (emp.profilePhotoUrl) setPhotoPreview(emp.profilePhotoUrl as string);
+      if (emp.department) setReportingDistrict(emp.department as string);
       setLoaded(true);
     }
   }, [emp, loaded]);
@@ -340,7 +355,7 @@ export default function EditEmployeePage() {
               />
             </Field>
             <Field label="District">
-              <Inp value={f("addressDistrict")} onChange={(v) => set("addressDistrict", v)} placeholder="e.g. Lahore" />
+              <SearchableSelect value={f("addressDistrict")} onChange={(v) => set("addressDistrict", v)} options={PFA_DISTRICTS} placeholder="Select district" searchPlaceholder="Search district…" />
             </Field>
             <Field label="Postal Code">
               <Inp value={f("addressPostalCode")} onChange={(v) => set("addressPostalCode", v)} placeholder="54000" />
@@ -400,11 +415,18 @@ export default function EditEmployeePage() {
           <Field label="Gross Salary (PKR)">
             <Inp type="number" value={f("salary")} onChange={(v) => set("salary", v)} placeholder="50000" />
           </Field>
+          <Field label="Reporting Officer District" hint="Filter reporting officer list by district">
+            <SearchableSelect
+              value={reportingDistrict}
+              onChange={(v) => { setReportingDistrict(v); set("reportingOfficerId", ""); }}
+              options={PFA_DISTRICTS} placeholder="Select district first…" searchPlaceholder="Search district…"
+            />
+          </Field>
           <Field label="Reporting Officer">
             <SearchableSelect
               value={f("reportingOfficerId")} onChange={(v) => set("reportingOfficerId", v)}
               options={managers.length ? managers : [{ value: "", label: "No employees found", sub: "No employees available" }]}
-              placeholder="Select reporting officer" searchPlaceholder="Search by name…"
+              placeholder={reportingDistrict ? "Search & select officer…" : "Select a district first…"} searchPlaceholder="Search by name…"
             />
           </Field>
           <Field label="Shift Type">

@@ -444,7 +444,7 @@ export default function AddEmployeePage() {
             <SearchableSelect value={watched.addressCity ?? ""} onChange={(v) => setValue("addressCity", v, { shouldValidate: true })} options={CITIES} placeholder="Select city" searchPlaceholder="Search city…" error={!!errors.addressCity} />
           </Field>
           <Field label="District" error={errors.addressDistrict?.message}>
-            <Input {...register("addressDistrict")} placeholder="Lahore" className="h-9 border-gray-200" />
+            <SearchableSelect value={watched.addressDistrict ?? ""} onChange={(v) => setValue("addressDistrict", v, { shouldValidate: true })} options={PFA_DISTRICTS} placeholder="Select district" searchPlaceholder="Search district…" error={!!errors.addressDistrict} />
           </Field>
           <Field label="Postal Code" error={errors.addressPostalCode?.message}>
             <Input {...register("addressPostalCode")} placeholder="54000" maxLength={5} className="h-9 border-gray-200 font-mono" />
