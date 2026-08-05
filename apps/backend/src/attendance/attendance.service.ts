@@ -73,13 +73,18 @@ export class AttendanceService {
 
     if (employee.requiresGeofence) {
       if (!dto.geofenceZoneId) {
+        this.logger.warn(`GEOFENCE_FAIL employee=${employeeId} reason=no_zone_id`);
         throw new BadRequestException('Geofence zone ID is required');
       }
       const zone = await this.prisma.geofenceZone.findFirst({
         where: { id: dto.geofenceZoneId, active: true },
       });
-      if (!zone) throw new NotFoundException('Geofence zone not found or inactive');
+      if (!zone) {
+        this.logger.warn(`GEOFENCE_FAIL employee=${employeeId} reason=zone_not_found zone=${dto.geofenceZoneId}`);
+        throw new NotFoundException('Geofence zone not found or inactive');
+      }
       if (!(employee.geofenceZoneIds as string[]).includes(zone.id)) {
+        this.logger.warn(`GEOFENCE_FAIL employee=${employeeId} reason=zone_not_assigned zone=${zone.id}`);
         throw new BadRequestException('This geofence zone is not assigned to your profile');
       }
 
@@ -88,6 +93,9 @@ export class AttendanceService {
       );
 
       if (!result.allowed) {
+        this.logger.warn(
+          `GEOFENCE_FAIL employee=${employeeId} zone="${zone.name}" dist=${result.distanceMeters.toFixed(0)}m radius=${zone.radiusMeters}m lat=${dto.lat} lng=${dto.lng} acc=${dto.gpsAccuracy ?? 'n/a'} reason=${result.message}`,
+        );
         throw new BadRequestException(result.message);
       }
 
