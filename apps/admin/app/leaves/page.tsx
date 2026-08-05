@@ -215,9 +215,28 @@ export default function LeavesPage() {
           <DialogHeader><DialogTitle className="text-[#006B3F]">Leave Request Details</DialogTitle></DialogHeader>
           {viewTarget && (
             <div className="space-y-4 pt-2">
+              {/* Employee info banner */}
+              <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Employee</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+                  {[
+                    ["Name", viewTarget.employee?.name],
+                    ["District", (viewTarget.employee as {department?: string})?.department ?? "—"],
+                    ["Designation", (viewTarget.employee as {designation?: string})?.designation ?? "—"],
+                    ["Email", viewTarget.employee?.email],
+                    ["Mobile", (viewTarget.employee as {mobilePhone?: string})?.mobilePhone ?? "—"],
+                  ].map(([label, value]) => (
+                    <div key={label}>
+                      <p className="text-[10px] text-gray-400 uppercase tracking-wide">{label}</p>
+                      <p className="font-medium text-gray-800 break-all">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Leave details */}
               <div className="grid grid-cols-2 gap-3 text-sm">
                 {[
-                  ["Employee", viewTarget.employee?.name],
                   ["Leave Type", viewTarget.leaveType],
                   ["Status", viewTarget.status.toUpperCase()],
                   ["Start Date", format(parseISO(viewTarget.startDate), "dd MMM yyyy")],

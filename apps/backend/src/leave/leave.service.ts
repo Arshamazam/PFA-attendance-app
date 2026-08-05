@@ -14,6 +14,7 @@ const EMPLOYEE_SELECT = {
   email: true,
   department: true,
   designation: true,
+  mobilePhone: true,
 } as const;
 
 function computeDays(start: Date, end: Date): number {
