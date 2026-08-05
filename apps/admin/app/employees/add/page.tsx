@@ -136,7 +136,15 @@ const PFA_DISTRICTS = [
 
 // Fallback values used while the API loads or if it fails
 const FALLBACK_DEPARTMENTS = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad"];
-const FALLBACK_DESIGNATIONS = ["Food Inspector", "Senior Inspector", "Supervisor", "Manager", "Admin", "Other"];
+const FALLBACK_DESIGNATIONS = [
+  "Deputy Director (Operations)", "Food Safety Officer", "Veterinary Specialist",
+  "Dairy Technologist", "Assistant Food Safety Officer", "Senior Clerk", "Junior Clerk",
+  "Driver", "Naib Qasid", "Junior Computer Operator", "Daak Rider", "Security Guard",
+  "Chowkidar", "Sweeper", "Accountant", "Computer Operator", "IT Coordinator", "Analyst",
+  "Lab Attendant", "Electrician", "Sanitary Worker", "IT Administrator",
+  "Admin Trainee (Skilled-JCO)", "Admin Trainee (Skilled-DR)", "Admin Trainee (Skilled-EN)",
+  "Admin Trainee (Unskilled)", "Consultant", "Food Safety Trainee Officer",
+];
 const FALLBACK_CADRES = ["FPSC", "Direct Recruitment", "Contract"];
 const FALLBACK_GRADES = ["BPS-12", "BPS-14", "BPS-16", "BPS-17", "BPS-18", "BPS-19", "BPS-20"];
 const FALLBACK_SHIFTS = ["Day", "Night", "Rotation"];

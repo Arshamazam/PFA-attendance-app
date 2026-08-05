@@ -19,7 +19,15 @@ import { format, parseISO } from "date-fns";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const DEPARTMENTS  = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad", "Sialkot", "Gujranwala"];
-const DESIGNATIONS = ["Food Inspector", "Senior Inspector", "Supervisor", "Manager", "Director", "Admin", "Clerk", "Driver", "Other"];
+const DESIGNATIONS = [
+  "Deputy Director (Operations)", "Food Safety Officer", "Veterinary Specialist",
+  "Dairy Technologist", "Assistant Food Safety Officer", "Senior Clerk", "Junior Clerk",
+  "Driver", "Naib Qasid", "Junior Computer Operator", "Daak Rider", "Security Guard",
+  "Chowkidar", "Sweeper", "Accountant", "Computer Operator", "IT Coordinator", "Analyst",
+  "Lab Attendant", "Electrician", "Sanitary Worker", "IT Administrator",
+  "Admin Trainee (Skilled-JCO)", "Admin Trainee (Skilled-DR)", "Admin Trainee (Skilled-EN)",
+  "Admin Trainee (Unskilled)", "Consultant", "Food Safety Trainee Officer",
+];
 const GRADES       = ["BPS-12", "BPS-14", "BPS-16", "BPS-17", "BPS-18", "BPS-19", "BPS-20", "BPS-21"];
 const SHIFTS       = ["Day", "Night", "Rotation"];
 const EMP_STATUSES = ["Active", "On Leave", "Suspended", "Retired"];
