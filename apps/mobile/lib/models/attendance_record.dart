@@ -24,6 +24,8 @@ class AttendanceRecord {
   bool get isCheckedOut => checkOutTime != null;
   bool get isCheckedIn => checkInTime != null;
 
+  bool get isAutoCheckout => status == 'auto_checkout';
+
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     final checkInTime = json['checkInTime'] != null
         ? DateTime.tryParse(json['checkInTime'] as String)?.toLocal()
@@ -31,6 +33,7 @@ class AttendanceRecord {
     final checkOutTime = json['checkOutTime'] != null
         ? DateTime.tryParse(json['checkOutTime'] as String)?.toLocal()
         : null;
+    final status = json['status'] as String? ?? 'present';
     // derive isLate from check-in hour (cutoff 9:00 AM) if not in payload
     final isLate = json['isLate'] is bool
         ? json['isLate'] as bool
@@ -50,7 +53,7 @@ class AttendanceRecord {
       lateReason: json['lateReason'] as String?,
       lateReasonNotes: json['lateReasonNotes'] as String?,
       geofenceZoneId: json['geofenceZoneId'] as String?,
-      status: json['status'] as String? ?? 'present',
+      status: status,
     );
   }
 }

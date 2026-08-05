@@ -97,16 +97,24 @@ export class AttendanceService {
       this.logger.log(`Employee ${employeeId} checked in (geofence exempted) from ${dto.lat},${dto.lng}`);
     }
 
-    // Auto-close any expired open check-in before allowing a new one
+    // Auto-close any expired open check-in before allowing a new one.
+    // Use 'asc' so we always act on the oldest open record first.
     const openRecord = await this.prisma.attendance.findFirst({
       where: { employeeId, checkOutTime: null },
+      orderBy: { checkInTime: 'asc' },
     });
 
     if (openRecord) {
       const shiftEnd = this.shiftEndUtc(openRecord.checkInTime, openRecord.shift);
       const nowUtc = new Date();
-      if (shiftEnd && nowUtc > shiftEnd) {
-        // Shift window expired — auto check-out at shift-end time
+      // Guard: shiftEnd must be strictly after checkInTime to avoid recording
+      // a checkout time that is earlier than the check-in (data integrity).
+      const canAutoClose =
+        shiftEnd !== null &&
+        nowUtc > shiftEnd &&
+        shiftEnd > openRecord.checkInTime;
+
+      if (canAutoClose) {
         await this.prisma.attendance.update({
           where: { id: openRecord.id },
           data: { checkOutTime: shiftEnd, status: 'auto_checkout', updatedAt: nowUtc },
