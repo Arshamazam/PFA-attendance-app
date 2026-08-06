@@ -93,7 +93,7 @@ export default function TransfersPage() {
                 className="pl-9 h-9 w-56"
               />
             </div>
-            <Select value={district} onValueChange={(v) => { setDistrict(v); setPage(1); }}>
+            <Select value={district} onValueChange={(v) => { if (v) { setDistrict(v); setPage(1); } }}>
               <SelectTrigger className="w-44 h-9 border-2 border-gray-300 hover:border-gray-400 focus-visible:border-[#006B3F] focus-visible:ring-2 focus-visible:ring-[#006B3F]/20">
                 <SelectValue placeholder="All Districts" />
               </SelectTrigger>
