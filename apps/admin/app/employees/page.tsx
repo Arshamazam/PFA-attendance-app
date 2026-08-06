@@ -18,6 +18,15 @@ import { format, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 
+const PFA_DISTRICTS = [
+  "LAHORE", "KASUR", "SHEIKHUPURA", "NANKANA", "FAISALABAD", "JHANG",
+  "CHINIOT", "T.T.SINGH", "OKARA", "SAHIWAL", "PAKPATTAN", "MURREE",
+  "RAWALPINDI", "ATTOCK", "CHAKWAL", "JHELUM", "GUJRANWALA", "GUJRAT",
+  "M.B.DIN", "HAFIZABAD", "SIALKOT", "NAROWAL", "BHAKKAR", "MIANWALI",
+  "KHUSHAB", "SARGODHA", "BAHAWALNAGAR", "BAHAWALPUR", "MULTAN", "LODHRAN",
+  "KHANEWAL", "VEHARI", "R.Y.KHAN", "D.G.KHAN", "LAYYAH", "MUZAFFARGARH", "RAJANPUR",
+];
+
 const DESIGNATIONS = [
   "All", "Deputy Director (Operations)", "Food Safety Officer", "Veterinary Specialist",
   "Dairy Technologist", "Assistant Food Safety Officer", "Senior Clerk", "Junior Clerk",
@@ -117,7 +126,7 @@ export default function EmployeesPage() {
         reason: transferReason.trim() || undefined,
       }),
     onSuccess: () => {
-      toast.success("Transfer request submitted — pending approval");
+      toast.success(`Employee transferred to ${toDept} successfully`);
       setTransferTarget(null);
       setToDept("");
       setTransferReason("");
@@ -420,8 +429,8 @@ export default function EmployeesPage() {
                     required
                     className="w-full h-10 text-sm border border-gray-200 rounded-xl px-3 bg-white focus:outline-none focus:ring-2 focus:ring-[#006B3F]/30 focus:border-[#006B3F]/50"
                   >
-                    <option value="">Select dept…</option>
-                    {departmentList.filter((d) => d !== transferTarget.department).map((d) => (
+                    <option value="">Select district…</option>
+                    {PFA_DISTRICTS.filter((d) => d.toLowerCase() !== (transferTarget.department ?? "").toLowerCase()).map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </select>

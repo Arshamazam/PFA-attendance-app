@@ -24,8 +24,11 @@ export class EmployeeTransfersController {
 
   @Post()
   @Roles('admin')
-  create(@Body() body: { employeeId: string; fromDepartment: string; toDepartment: string; transferDate: string; reason?: string }) {
-    return this.service.create(body);
+  create(
+    @Body() body: { employeeId: string; fromDepartment: string; toDepartment: string; transferDate: string; reason?: string },
+    @CurrentUser() user: { id: string },
+  ) {
+    return this.service.create({ ...body, approvedBy: user.id });
   }
 
   @Patch(':id')

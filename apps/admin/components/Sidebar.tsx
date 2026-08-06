@@ -19,6 +19,7 @@ import {
   Star,
   CalendarDays,
   MapPin,
+  ArrowLeftRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -26,6 +27,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 const navItems: { href: string; label: string; icon: React.ElementType; disabled?: boolean }[] = [
   { href: "/dashboard",           label: "Dashboard",          icon: LayoutDashboard },
   { href: "/employees",           label: "Employees",          icon: Users },
+  { href: "/transfers",           label: "Transfers",          icon: ArrowLeftRight },
   { href: "/attendance",          label: "Attendance",         icon: Clock },
   { href: "/leaves",              label: "Leave Approvals",    icon: CalendarCheck },
   { href: "/performance-reviews",  label: "Performance Reviews", icon: Star },

@@ -36,14 +36,27 @@ export class EmployeeTransfersService {
     reason?: string;
     approvedBy?: string;
   }) {
-    return this.prisma.employeeTransfer.create({
+    // Admin transfers are auto-approved: create record and update employee district immediately
+    const transfer = await this.prisma.employeeTransfer.create({
       data: {
         ...dto,
         transferDate: new Date(dto.transferDate),
+        status: 'Approved',
         updatedAt: new Date(),
       },
-      include: { employee: { select: { id: true, name: true } } },
+      include: {
+        employee: { select: { id: true, name: true } },
+        approver: { select: { id: true, name: true } },
+      },
     });
+
+    // Immediately move the employee to the new district
+    await this.prisma.employee.update({
+      where: { id: dto.employeeId },
+      data: { department: dto.toDepartment },
+    });
+
+    return transfer;
   }
 
   async updateStatus(id: string, status: string, approvedBy?: string) {
