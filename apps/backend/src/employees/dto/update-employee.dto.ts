@@ -27,6 +27,7 @@ export class UpdateEmployeeDto {
   // Employment
   dateOfJoining?: string;
   department?: string;
+  wing?: string;
   designation?: string;
   serviceCadre?: string;
   grade?: string;

@@ -34,6 +34,7 @@ const SAFE_SELECT = {
   employeeCode: true,
   dateOfJoining: true,
   department: true,
+  wing: true,
   designation: true,
   serviceCadre: true,
   grade: true,
@@ -183,6 +184,7 @@ export class EmployeesService {
         employeeCode,
         dateOfJoining: dto.dateOfJoining ? new Date(dto.dateOfJoining) : undefined,
         department: dto.department || null,
+        wing: dto.wing || null,
         designation: dto.designation || null,
         serviceCadre: dto.serviceCadre || null,
         grade: dto.grade || null,
@@ -256,6 +258,7 @@ export class EmployeesService {
     // Employment
     if (dto.dateOfJoining !== undefined) data.dateOfJoining = dto.dateOfJoining ? new Date(dto.dateOfJoining) : null;
     if (dto.department !== undefined) data.department = dto.department || null;
+    if (dto.wing !== undefined) data.wing = dto.wing || null;
     if (dto.designation !== undefined) data.designation = dto.designation || null;
     if (dto.serviceCadre !== undefined) data.serviceCadre = dto.serviceCadre || null;
     if (dto.grade !== undefined) data.grade = dto.grade || null;

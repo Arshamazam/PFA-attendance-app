@@ -28,6 +28,7 @@ export class CreateEmployeeDto {
   employeeCode?: string;
   dateOfJoining?: string;
   department?: string;
+  wing?: string;
   designation?: string;
   serviceCadre?: string;
   grade?: string;

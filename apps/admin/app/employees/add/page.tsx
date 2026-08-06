@@ -66,9 +66,12 @@ const step2Schema = z.object({
   emergencyContactRel: z.string().optional(),
 });
 
+const PFA_WINGS = ["Operations", "Technical", "R&L", "HQrs", "Admin & Finance", "PR", "Audit"];
+
 const step3Schema = z.object({
   dateOfJoining: z.string().optional().refine((d) => !d || new Date(d) <= new Date(), "Cannot be a future date"),
   department: z.string().optional().or(z.literal("")),
+  wing: z.string().optional().or(z.literal("")),
   designation: z.string().optional().or(z.literal("")),
   serviceCadre: z.string().optional().or(z.literal("")),
   grade: z.string().optional().or(z.literal("")),
@@ -488,8 +491,22 @@ export default function AddEmployeePage() {
           <Field label="Date of Joining" error={errors.dateOfJoining?.message}>
             <Input {...register("dateOfJoining")} type="date" max={new Date().toISOString().split("T")[0]} className="h-9 border-gray-200" />
           </Field>
-          <Field label="Department" error={errors.department?.message}>
-            <SearchableSelect value={watched.department ?? ""} onChange={(v) => setValue("department", v, { shouldValidate: true })} options={DEPARTMENTS} placeholder="Select department" searchPlaceholder="Search department…" error={!!errors.department} />
+          <Field label="District" error={errors.department?.message}>
+            <SearchableSelect
+              value={watched.department ?? ""}
+              onChange={(v) => {
+                setValue("department", v, { shouldValidate: true });
+                setWorkDistrict(v);
+                setValue("reportingOfficerId", "", { shouldValidate: false });
+              }}
+              options={PFA_DISTRICTS}
+              placeholder="Select district…"
+              searchPlaceholder="Search district…"
+              error={!!errors.department}
+            />
+          </Field>
+          <Field label="Wing" error={errors.wing?.message}>
+            <SearchableSelect value={watched.wing ?? ""} onChange={(v) => setValue("wing", v, { shouldValidate: true })} options={PFA_WINGS} placeholder="Select wing…" searchPlaceholder="Search wing…" error={!!errors.wing} />
           </Field>
           <Field label="Designation / Position" error={errors.designation?.message}>
             <SearchableSelect value={watched.designation ?? ""} onChange={(v) => setValue("designation", v, { shouldValidate: true })} options={DESIGNATIONS} placeholder="Select designation" searchPlaceholder="Search designation…" error={!!errors.designation} />
@@ -502,15 +519,6 @@ export default function AddEmployeePage() {
           </Field>
           <Field label="Basic Salary (PKR)" error={errors.salary?.message}>
             <Input {...register("salary")} type="number" placeholder="50000" className="h-9 border-gray-200" />
-          </Field>
-          <Field label="District" error={undefined}>
-            <SearchableSelect
-              value={workDistrict}
-              onChange={(v) => { setWorkDistrict(v); setValue("reportingOfficerId", "", { shouldValidate: false }); }}
-              options={PFA_DISTRICTS}
-              placeholder="Select district…"
-              searchPlaceholder="Search district…"
-            />
           </Field>
           <Field label="Reporting Officer" error={errors.reportingOfficerId?.message}>
             <SearchableSelect

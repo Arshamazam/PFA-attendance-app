@@ -157,10 +157,10 @@ export default function EmployeesPage() {
       });
       const res = await api.get<PaginatedResponse<Employee>>(`/employees?${exportParams}`);
       const all = res.data.data;
-      const header = ["Employee ID", "Name", "Email", "Designation", "Department", "Mobile", "Status", "Joined"];
+      const header = ["Employee ID", "Name", "Email", "Designation", "District", "Wing", "Mobile", "Status", "Joined"];
       const csvRows = all.map((e) => [
         e.employeeCode ?? "", e.name, e.email, e.designation ?? "", e.department ?? "",
-        e.mobilePhone ?? "", e.active !== false ? "Active" : "Inactive",
+        (e as any).wing ?? "", e.mobilePhone ?? "", e.active !== false ? "Active" : "Inactive",
         e.createdAt ? format(parseISO(e.createdAt), "yyyy-MM-dd") : "",
       ]);
       const csv = [header, ...csvRows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -236,7 +236,7 @@ export default function EmployeesPage() {
         {hasFilters && (
           <div className="flex gap-1.5 flex-wrap">
             {search && <Badge variant="outline" className="text-xs gap-1 bg-blue-50 border-blue-200 text-blue-700">Search: {search}<button onClick={() => setSearch("")}><X className="w-2.5 h-2.5" /></button></Badge>}
-            {department !== "All" && <Badge variant="outline" className="text-xs gap-1 bg-purple-50 border-purple-200 text-purple-700">Dept: {department}<button onClick={() => setDepartment("All")}><X className="w-2.5 h-2.5" /></button></Badge>}
+            {department !== "All" && <Badge variant="outline" className="text-xs gap-1 bg-purple-50 border-purple-200 text-purple-700">District: {department}<button onClick={() => setDepartment("All")}><X className="w-2.5 h-2.5" /></button></Badge>}
             {designation !== "All" && <Badge variant="outline" className="text-xs gap-1 bg-orange-50 border-orange-200 text-orange-700">Role: {designation}<button onClick={() => setDesignation("All")}><X className="w-2.5 h-2.5" /></button></Badge>}
             {status !== "all" && <Badge variant="outline" className="text-xs gap-1 bg-green-50 border-green-200 text-green-700">Status: {status}<button onClick={() => setStatus("all")}><X className="w-2.5 h-2.5" /></button></Badge>}
           </div>
@@ -262,8 +262,9 @@ export default function EmployeesPage() {
                     Designation <SortIcon col="designation" />
                   </TableHead>
                   <TableHead className="text-xs font-semibold cursor-pointer select-none" onClick={() => toggleSort("department")}>
-                    Department <SortIcon col="department" />
+                    District <SortIcon col="department" />
                   </TableHead>
+                  <TableHead className="text-xs font-semibold">Wing</TableHead>
                   <TableHead className="text-xs font-semibold">Mobile</TableHead>
                   <TableHead className="text-xs font-semibold">Status</TableHead>
                   <TableHead className="text-xs font-semibold text-right">Actions</TableHead>
@@ -273,14 +274,14 @@ export default function EmployeesPage() {
                 {isLoading ? (
                   Array.from({ length: 6 }).map((_, i) => (
                     <TableRow key={i} className={i % 2 === 0 ? "bg-white" : "bg-gray-50/50"}>
-                      {Array.from({ length: 8 }).map((__, j) => (
+                      {Array.from({ length: 9 }).map((__, j) => (
                         <TableCell key={j}><div className="h-4 bg-gray-100 rounded animate-pulse" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="text-center py-16">
+                    <TableCell colSpan={9} className="text-center py-16">
                       <div className="flex flex-col items-center gap-2 text-gray-400">
                         <Search className="w-8 h-8 opacity-40" />
                         <p className="font-medium">No employees found</p>
@@ -306,6 +307,7 @@ export default function EmployeesPage() {
                       <TableCell className="text-sm text-gray-600">{emp.email}</TableCell>
                       <TableCell className="text-sm text-gray-600">{emp.designation ?? "—"}</TableCell>
                       <TableCell className="text-sm text-gray-600">{emp.department ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-gray-600">{(emp as any).wing ?? "—"}</TableCell>
                       <TableCell className="text-sm text-gray-500 font-mono">{emp.mobilePhone ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={emp.active !== false ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-100 text-gray-500 border-gray-200"}>

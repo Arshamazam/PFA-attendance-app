@@ -18,7 +18,7 @@ import {
 import { format, parseISO } from "date-fns";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const DEPARTMENTS  = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad", "Sialkot", "Gujranwala"];
+const PFA_WINGS = ["Operations", "Technical", "R&L", "HQrs", "Admin & Finance", "PR", "Audit"];
 const DESIGNATIONS = [
   "Deputy Director (Operations)", "Food Safety Officer", "Veterinary Specialist",
   "Dairy Technologist", "Assistant Food Safety Officer", "Senior Clerk", "Junior Clerk",
@@ -398,10 +398,17 @@ export default function EditEmployeePage() {
             <Inp type="date" value={dateVal("dateOfJoining")} onChange={(v) => set("dateOfJoining", v)}
               placeholder="" />
           </Field>
-          <Field label="Department">
+          <Field label="District">
             <SearchableSelect
-              value={f("department")} onChange={(v) => set("department", v)}
-              options={DEPARTMENTS} placeholder="Select department" searchPlaceholder="Search department…"
+              value={f("department")}
+              onChange={(v) => { set("department", v); setReportingDistrict(v); set("reportingOfficerId", ""); }}
+              options={PFA_DISTRICTS} placeholder="Select district…" searchPlaceholder="Search district…"
+            />
+          </Field>
+          <Field label="Wing">
+            <SearchableSelect
+              value={f("wing")} onChange={(v) => set("wing", v)}
+              options={PFA_WINGS} placeholder="Select wing…" searchPlaceholder="Search wing…"
             />
           </Field>
           <Field label="Designation">
@@ -422,13 +429,6 @@ export default function EditEmployeePage() {
           </Field>
           <Field label="Gross Salary (PKR)">
             <Inp type="number" value={f("salary")} onChange={(v) => set("salary", v)} placeholder="50000" />
-          </Field>
-          <Field label="Reporting Officer District" hint="Filter reporting officer list by district">
-            <SearchableSelect
-              value={reportingDistrict}
-              onChange={(v) => { setReportingDistrict(v); set("reportingOfficerId", ""); }}
-              options={PFA_DISTRICTS} placeholder="Select district first…" searchPlaceholder="Search district…"
-            />
           </Field>
           <Field label="Reporting Officer">
             <SearchableSelect
