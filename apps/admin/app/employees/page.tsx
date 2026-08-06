@@ -159,8 +159,9 @@ export default function EmployeesPage() {
       const all = res.data.data;
       const header = ["Employee ID", "Name", "Email", "Designation", "District", "Wing", "Mobile", "Status", "Joined"];
       const csvRows = all.map((e) => [
-        e.employeeCode ?? "", e.name, e.email, e.designation ?? "", e.department ?? "",
-        (e as any).wing ?? "", e.mobilePhone ?? "", e.active !== false ? "Active" : "Inactive",
+        e.employeeCode ?? "", e.name, e.email, e.designation ?? "",
+        e.department || e.addressDistrict || "",
+        e.wing ?? "", e.mobilePhone ?? "", e.active !== false ? "Active" : "Inactive",
         e.createdAt ? format(parseISO(e.createdAt), "yyyy-MM-dd") : "",
       ]);
       const csv = [header, ...csvRows].map((r) => r.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n");
@@ -306,8 +307,8 @@ export default function EmployeesPage() {
                       </TableCell>
                       <TableCell className="text-sm text-gray-600">{emp.email}</TableCell>
                       <TableCell className="text-sm text-gray-600">{emp.designation ?? "—"}</TableCell>
-                      <TableCell className="text-sm text-gray-600">{emp.department ?? "—"}</TableCell>
-                      <TableCell className="text-sm text-gray-600">{(emp as any).wing ?? "—"}</TableCell>
+                      <TableCell className="text-sm text-gray-600">{emp.department || emp.addressDistrict || "—"}</TableCell>
+                      <TableCell className="text-sm text-gray-600">{emp.wing ?? "—"}</TableCell>
                       <TableCell className="text-sm text-gray-500 font-mono">{emp.mobilePhone ?? "—"}</TableCell>
                       <TableCell>
                         <Badge variant="outline" className={emp.active !== false ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-100 text-gray-500 border-gray-200"}>

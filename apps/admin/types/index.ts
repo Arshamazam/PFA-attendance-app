@@ -6,6 +6,8 @@ export interface Employee {
   employeeCode?: string;
   designation?: string;
   department?: string;
+  wing?: string;
+  addressDistrict?: string;
   mobilePhone?: string;
   profilePhotoUrl?: string | null;
   active?: boolean;
