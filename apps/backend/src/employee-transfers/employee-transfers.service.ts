@@ -1,9 +1,13 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { GeofenceSyncService } from 'src/geofence-sync/geofence-sync.service';
 
 @Injectable()
 export class EmployeeTransfersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly geofenceSync: GeofenceSyncService,
+  ) {}
 
   async findAll(department?: string, status?: string, page = 1, limit = 20, employeeId?: string) {
     const where: Record<string, unknown> = {};
@@ -36,7 +40,6 @@ export class EmployeeTransfersService {
     reason?: string;
     approvedBy?: string;
   }) {
-    // Admin transfers are auto-approved: create record and update employee district immediately
     const transfer = await this.prisma.employeeTransfer.create({
       data: {
         ...dto,
@@ -50,11 +53,11 @@ export class EmployeeTransfersService {
       },
     });
 
-    // Immediately move the employee to the new district
     await this.prisma.employee.update({
       where: { id: dto.employeeId },
       data: { department: dto.toDepartment },
     });
+    await this.geofenceSync.syncZoneForEmployee(dto.employeeId, dto.toDepartment);
 
     return transfer;
   }
@@ -68,12 +71,12 @@ export class EmployeeTransfersService {
       data: { status, ...(approvedBy ? { approvedBy } : {}), updatedAt: new Date() },
     });
 
-    // If approved, update employee's department
     if (status === 'Approved') {
       await this.prisma.employee.update({
         where: { id: transfer.employeeId },
         data: { department: transfer.toDepartment },
       });
+      await this.geofenceSync.syncZoneForEmployee(transfer.employeeId, transfer.toDepartment);
     }
     return updated;
   }

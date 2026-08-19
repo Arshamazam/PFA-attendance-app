@@ -15,10 +15,12 @@ import { DropdownMasterModule } from './dropdown-master/dropdown-master.module';
 import { PerformanceReviewModule } from './performance-review/performance-review.module';
 import { EmployeeCategoriesModule } from './employee-categories/employee-categories.module';
 import { LeaveBalanceModule } from './leave-balance/leave-balance.module';
+import { GeofenceSyncModule } from './geofence-sync/geofence-sync.module';
 import { PrismaService } from './prisma/prisma.service';
 
 @Module({
   imports: [
+    GeofenceSyncModule,
     AuthModule,
     EmployeesModule,
     AttendanceModule,

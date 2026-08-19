@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { GeofenceSyncService } from 'src/geofence-sync/geofence-sync.service';
 import { CreateEmployeeDto } from './dto/create-employee.dto';
 import { UpdateEmployeeDto } from './dto/update-employee.dto';
 
@@ -66,7 +67,10 @@ const SAFE_SELECT = {
 export class EmployeesService {
   private readonly logger = new Logger(EmployeesService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly geofenceSync: GeofenceSyncService,
+  ) {}
 
   async findAll(page = 1, limit = 20, role?: string, search?: string, department?: string, status?: string, designation?: string) {
     const skip = (page - 1) * limit;
@@ -209,6 +213,13 @@ export class EmployeesService {
     });
 
     this.logger.log(`Employee created: ${employee.email} (${employee.employeeCode})`);
+
+    // Auto-assign geofence zone if department is set and no zone was explicitly provided
+    const hasExplicitZone = dto.geofenceZoneIds && (dto.geofenceZoneIds as string[]).length > 0;
+    if (dto.department && !hasExplicitZone) {
+      await this.geofenceSync.syncZoneForEmployee(employee.id, dto.department);
+    }
+
     return employee;
   }
 
@@ -229,7 +240,13 @@ export class EmployeesService {
 
     // Core
     if (dto.name) data.name = dto.name;
-    if (dto.email) data.email = dto.email;
+    if (dto.email && dto.email.toLowerCase() !== employee.email.toLowerCase()) {
+      const emailTaken = await this.prisma.employee.findFirst({
+        where: { email: dto.email, NOT: { id } },
+      });
+      if (emailTaken) throw new ConflictException('This email is already registered to another employee');
+      data.email = dto.email;
+    }
     if (dto.password) {
       data.password = await bcrypt.hash(dto.password, 10);
       data.plainPassword = dto.password;
@@ -296,6 +313,13 @@ export class EmployeesService {
     });
 
     this.logger.log(`Employee updated: ${updated.email} by ${requesterId}`);
+
+    // If department changed and no explicit zone override was provided, auto-sync zone
+    const departmentChanged = dto.department !== undefined && dto.department !== employee.department;
+    const explicitZoneOverride = dto.geofenceZoneIds !== undefined && requesterRole === 'admin';
+    if (departmentChanged && !explicitZoneOverride && dto.department) {
+      await this.geofenceSync.syncZoneForEmployee(id, dto.department);
+    }
 
     // Notify the employee about their profile change (visible in their mobile app)
     const FIELD_LABELS: Record<string, string> = {

@@ -16,11 +16,15 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { CurrentUser } from 'src/common/decorators/current-user.decorator';
+import { GeofenceSyncService } from 'src/geofence-sync/geofence-sync.service';
 
 @Controller('employees')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class EmployeesController {
-  constructor(private readonly employeesService: EmployeesService) {}
+  constructor(
+    private readonly employeesService: EmployeesService,
+    private readonly geofenceSync: GeofenceSyncService,
+  ) {}
 
   @Get()
   @Roles('admin', 'manager', 'super_admin')
@@ -63,6 +67,14 @@ export class EmployeesController {
       body.reason,
       user.id,
     );
+  }
+
+  // Backfill all active employees who have a department but no zone assigned.
+  // Safe to call multiple times — skips employees who already have a zone.
+  @Post('sync-zones')
+  @Roles('super_admin', 'admin')
+  syncZones() {
+    return this.geofenceSync.backfillMissingZones();
   }
 
   @Get('departments')
