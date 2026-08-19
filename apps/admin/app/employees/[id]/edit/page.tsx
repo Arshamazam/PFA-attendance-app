@@ -765,8 +765,7 @@ export default function EditEmployeePage() {
           <div className="md:col-span-2">
             <Field label="Current Password" hint="Use the Reset Password button on the profile page to change this employee's password">
               <div className="flex items-center h-10 px-3 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-400 font-mono select-none">
-                ••••••••
-              </div>
+                {'••••••••'}
               </div>
             </Field>
           </div>
