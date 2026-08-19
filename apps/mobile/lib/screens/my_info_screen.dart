@@ -88,7 +88,7 @@ class _ProfileCard extends StatelessWidget {
   final String initial;
   final String? photoUrl;
 
-  static String get _adminBase => ApiService.baseUrl.replaceFirst(':3000', ':3001');
+  static String get _adminBase => 'https://srv1809828.hstgr.cloud';
   static String get _backendBase => ApiService.baseUrl;
 
   const _ProfileCard({
@@ -489,11 +489,17 @@ class _ActionButtons extends StatelessWidget {
                               await auth.changePassword(currentCtrl.text, newCtrl.text);
                               if (ctx.mounted) Navigator.of(ctx).pop();
                               if (context.mounted) {
+                                await auth.logout();
+                                Navigator.of(context).pushAndRemoveUntil(
+                                  MaterialPageRoute(builder: (_) => const LoginScreen()),
+                                  (_) => false,
+                                );
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Password changed successfully'),
+                                    content: Text('Password changed. Please log in with your new password.'),
                                     backgroundColor: Color(0xFF006B3F),
                                     behavior: SnackBarBehavior.floating,
+                                    duration: Duration(seconds: 4),
                                   ),
                                 );
                               }

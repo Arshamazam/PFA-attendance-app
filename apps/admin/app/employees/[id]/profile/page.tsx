@@ -13,7 +13,8 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowLeft, Pencil, Printer, ArrowLeftRight, ArrowRight, FileText, Download, ExternalLink, Star, KeyRound, Eye, EyeOff } from "lucide-react";
+import { ArrowLeft, Pencil, Printer, ArrowLeftRight, ArrowRight, FileText, Download, ExternalLink, Star, KeyRound, Eye, EyeOff, Clock, LogIn, LogOut, AlertCircle } from "lucide-react";
+
 import { format, parseISO } from "date-fns";
 
 const DEPARTMENTS = ["Lahore", "Islamabad", "Multan", "Peshawar", "Quetta", "Faisalabad"];
@@ -31,7 +32,6 @@ interface EmpDetail {
   profilePhotoUrl?: string | null;
   cnicCopyUrl?: string; degreeCertificateUrl?: string; medicalCertificateUrl?: string;
   active?: boolean; createdAt?: string;
-  plainPassword?: string;
 }
 
 interface Transfer {
@@ -89,11 +89,28 @@ export default function EmployeeProfilePage() {
   const [resetPwOpen, setResetPwOpen]     = useState(false);
   const [newPw, setNewPw]                 = useState("");
   const [showNewPw, setShowNewPw]         = useState(false);
-  const [showCurrentPw, setShowCurrentPw] = useState(false);
 
   const { data: emp, isLoading } = useQuery<EmpDetail>({
     queryKey: ["employee", id],
     queryFn: () => api.get(`/employees/${id}`).then((r) => r.data as EmpDetail),
+  });
+
+  interface AttendanceRow {
+    id: string;
+    checkInTime: string;
+    checkOutTime: string | null;
+    status: string;
+    shift: string | null;
+    geofenceZone: { name: string } | null;
+  }
+
+  const { data: attendanceHistory } = useQuery<{ data: AttendanceRow[]; total: number }>({
+    queryKey: ["employee-attendance", id],
+    queryFn: () =>
+      api
+        .get<{ data: AttendanceRow[]; total: number }>(`/attendance/all?employeeId=${id}&limit=50`)
+        .then((r) => r.data),
+    enabled: !!id,
   });
 
   const { data: transferHistory } = useQuery<{ data: Transfer[]; total: number }>({
@@ -336,23 +353,6 @@ export default function EmployeeProfilePage() {
 
         <Section title="Contact Information">
           <Row label="Email" value={emp.email} />
-          {emp.plainPassword && (
-            <div className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-              <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide w-36 shrink-0">Current Password</span>
-              <div className="flex items-center gap-2 flex-1 justify-end">
-                <span className="text-sm text-gray-800 font-mono">
-                  {showCurrentPw ? emp.plainPassword : "••••••••"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowCurrentPw(!showCurrentPw)}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  {showCurrentPw ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-          )}
           <Row label="Mobile Phone" value={emp.mobilePhone} />
           <Row label="Landline" value={emp.landlinePhone} />
           <Row label="Street" value={emp.addressStreet} />
@@ -471,6 +471,88 @@ export default function EmployeeProfilePage() {
           </div>
         )}
       </div>
+
+      {/* ── Attendance History ─────────────────────── */}
+      {(() => {
+        const records = attendanceHistory?.data ?? [];
+        const openRecord = records.find((r) => !r.checkOutTime);
+        const fmt = (iso: string) => format(parseISO(iso), "dd MMM yyyy");
+        const fmtTime = (iso: string) => format(parseISO(iso), "hh:mm a");
+        const duration = (inIso: string, outIso: string) => {
+          const mins = Math.round((new Date(outIso).getTime() - new Date(inIso).getTime()) / 60000);
+          return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+        };
+        const statusBadge = (s: string) => {
+          if (s === "auto_checkout") return <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 border border-gray-200"><Clock size={9} />Auto</span>;
+          if (s === "late")         return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-orange-50 text-orange-600 border border-orange-200">Late</span>;
+          return <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-green-50 text-green-700 border border-green-200">On Time</span>;
+        };
+        return (
+          <div className="mt-6 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-50">
+              <div className="flex items-center gap-2">
+                <Clock size={15} className="text-[#006B3F]" />
+                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-widest">Attendance History</h3>
+                {records.length > 0 && (
+                  <span className="text-[10px] bg-gray-100 text-gray-500 font-semibold px-2 py-0.5 rounded-full">
+                    {attendanceHistory?.total ?? records.length} records
+                  </span>
+                )}
+              </div>
+              {openRecord && (
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-green-700 bg-green-50 border border-green-200 px-3 py-1 rounded-full">
+                  <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                  Currently Checked In · {fmtTime(openRecord.checkInTime)}
+                </span>
+              )}
+            </div>
+
+            {records.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-2 text-gray-400">
+                <AlertCircle size={28} className="opacity-25" />
+                <p className="text-sm">No attendance records found</p>
+              </div>
+            ) : (
+              <div className="overflow-auto max-h-[400px]">
+                <table className="w-full min-w-[640px] text-sm border-collapse">
+                  <thead className="sticky top-0 bg-gray-50/95 backdrop-blur-sm z-10">
+                    <tr>
+                      {["Date", "Check In", "Check Out", "Hours", "Status", "Zone"].map((h) => (
+                        <th key={h} className="text-left text-[10px] font-bold text-gray-400 uppercase tracking-wider px-4 py-3 border-b border-gray-100 whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {records.map((r) => {
+                      const isOpen = !r.checkOutTime;
+                      return (
+                        <tr key={r.id} className={`transition-colors ${isOpen ? "bg-green-50/40" : "hover:bg-gray-50/60"}`} style={{ borderBottom: "1px solid #F8FAFC" }}>
+                          <td className="px-4 py-2.5 text-xs text-gray-500 font-medium whitespace-nowrap">{fmt(r.checkInTime)}</td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1 text-xs text-gray-700"><LogIn size={11} className="text-green-600" />{fmtTime(r.checkInTime)}</span>
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">
+                            {isOpen
+                              ? <span className="text-xs text-green-600 font-semibold italic">Active</span>
+                              : <span className="inline-flex items-center gap-1 text-xs text-gray-700"><LogOut size={11} className="text-red-400" />{fmtTime(r.checkOutTime!)}</span>}
+                          </td>
+                          <td className="px-4 py-2.5 text-xs text-gray-500 font-mono whitespace-nowrap">
+                            {isOpen ? "—" : duration(r.checkInTime, r.checkOutTime!)}
+                          </td>
+                          <td className="px-4 py-2.5 whitespace-nowrap">{statusBadge(r.status)}</td>
+                          <td className="px-4 py-2.5 text-xs text-gray-400 whitespace-nowrap truncate max-w-[160px]">
+                            {r.geofenceZone?.name ?? "—"}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Transfer Dialog ────────────────────────── */}
       <Dialog open={transferOpen} onOpenChange={setTransferOpen}>

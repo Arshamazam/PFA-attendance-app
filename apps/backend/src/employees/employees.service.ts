@@ -15,7 +15,6 @@ const SAFE_SELECT = {
   id: true,
   name: true,
   email: true,
-  plainPassword: true,
   role: true,
   fathersName: true,
   cnic: true,

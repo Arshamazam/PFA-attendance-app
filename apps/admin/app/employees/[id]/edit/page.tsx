@@ -146,7 +146,6 @@ export default function EditEmployeePage() {
   const [adjustReason,    setAdjustReason]    = useState("");
   const [reverseLogId,    setReverseLogId]    = useState<string | null>(null);
   const [reverseReason,   setReverseReason]   = useState("");
-  const [showCurrentPw,   setShowCurrentPw]   = useState(false);
 
   const { data: balanceData, refetch: refetchBalances } = useQuery<{
     fiscalYear: string;
@@ -201,7 +200,9 @@ export default function EditEmployeePage() {
   useEffect(() => {
     if (emp && !loaded) {
       const f: Form = {};
+      const SKIP = new Set(["password", "plainPassword"]);
       Object.entries(emp).forEach(([k, v]) => {
+        if (SKIP.has(k)) return;
         if (v !== null && v !== undefined) {
           f[k] = typeof v === "object" ? JSON.stringify(v) : String(v);
         }
@@ -268,7 +269,13 @@ export default function EditEmployeePage() {
 
   // ─── Save mutation ────────────────────────────────────────────────────────
   const updateMutation = useMutation({
-    mutationFn: (payload: Form) => api.patch(`/employees/${id}`, payload),
+    mutationFn: (payload: Form) => {
+      // Never send password/plainPassword unless the admin explicitly typed a new one
+      const { password, plainPassword, ...safe } = payload as Form & { password?: string; plainPassword?: string };
+      const data: Form = { ...safe };
+      if (password && String(password).trim().length >= 8) data.password = password;
+      return api.patch(`/employees/${id}`, data);
+    },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["employee", id] });
       qc.invalidateQueries({ queryKey: ["employees"] });
@@ -756,41 +763,16 @@ export default function EditEmployeePage() {
             />
           </Field>
           <div className="md:col-span-2">
-            <Field label="Current Password" hint="The employee's active login password">
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  <Input
-                    type={showCurrentPw ? "text" : "password"}
-                    value={(emp?.plainPassword as string) ?? ""}
-                    readOnly
-                    placeholder="Not recorded"
-                    className="h-10 border-gray-200 text-sm bg-gray-50 text-gray-600 font-mono pr-10 cursor-default"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowCurrentPw((v) => !v)}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                  >
-                    {showCurrentPw ? <EyeOff size={15} /> : <Eye size={15} />}
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const pw = (emp?.plainPassword as string) ?? "";
-                    if (pw) { navigator.clipboard.writeText(pw); }
-                  }}
-                  title="Copy password"
-                  className="h-10 w-10 flex items-center justify-center rounded-md border border-gray-200 bg-gray-50 hover:bg-gray-100 text-gray-500 hover:text-gray-700 transition-colors"
-                >
-                  <Copy size={14} />
-                </button>
+            <Field label="Current Password" hint="Use the Reset Password button on the profile page to change this employee's password">
+              <div className="flex items-center h-10 px-3 rounded-md border border-gray-200 bg-gray-50 text-sm text-gray-400 font-mono select-none">
+                ••••••••
+              </div>
               </div>
             </Field>
           </div>
           <div className="md:col-span-2">
             <Field label="Set New Password" hint="Leave blank to keep the current password — minimum 8 characters">
-              <Input type="password" value={(form.password as string) ?? ""} onChange={(e) => set("password", e.target.value)}
+              <Input type="password" autoComplete="new-password" value={(form.password as string) ?? ""} onChange={(e) => set("password", e.target.value)}
                 placeholder="Enter new password to change"
                 className="h-10 border-gray-200 text-sm focus-visible:border-[#006B3F] focus-visible:ring-2 focus-visible:ring-[#006B3F]/20 hover:border-gray-300" />
             </Field>

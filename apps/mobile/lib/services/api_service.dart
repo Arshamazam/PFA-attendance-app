@@ -20,7 +20,7 @@ class UnauthorizedException extends ApiException {
 }
 
 class ApiService {
-  static String _baseUrl = 'http://187.127.125.215:3000';
+  static String _baseUrl = 'https://srv1809828.hstgr.cloud/api';
   static String get baseUrl => _baseUrl;
 
   // Call once in main() before runApp — detects iOS Simulator vs real device
@@ -39,8 +39,8 @@ class ApiService {
     _dio = Dio(
       BaseOptions(
         baseUrl: _baseUrl,
-        connectTimeout: const Duration(seconds: 15),
-        receiveTimeout: const Duration(seconds: 30),
+        connectTimeout: const Duration(seconds: 40),
+        receiveTimeout: const Duration(seconds: 60),
         headers: {'Content-Type': 'application/json'},
       ),
     );
