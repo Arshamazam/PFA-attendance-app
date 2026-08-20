@@ -84,7 +84,42 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
       ),
       body: records.isEmpty && provider.isLoading
           ? const Center(child: CircularProgressIndicator(color: _primary))
-          : records.isEmpty
+          : records.isEmpty && provider.errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.cloud_off_rounded, size: 64, color: Colors.grey.shade300),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Could not load records',
+                          style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w600, color: const Color(0xFF333333)),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Check your internet connection and try again.',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.roboto(fontSize: 13, color: Colors.grey.shade500, height: 1.5),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: () => context.read<AttendanceProvider>().fetchDashboard(),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: Text('Retry', style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : records.isEmpty
               ? Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -92,7 +127,7 @@ class _AttendanceHistoryScreenState extends State<AttendanceHistoryScreen> {
                       Icon(Icons.history_rounded, size: 64, color: Colors.grey.shade300),
                       const SizedBox(height: 12),
                       Text(
-                        'No attendance records',
+                        'No attendance records yet',
                         style: GoogleFonts.poppins(fontSize: 16, color: Colors.grey.shade400),
                       ),
                     ],

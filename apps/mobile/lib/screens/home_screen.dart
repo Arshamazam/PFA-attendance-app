@@ -961,6 +961,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
               child: CircularProgressIndicator(),
             ),
           )
+        else if (records.isEmpty && attendance.errorMessage != null)
+          _errorAttendance(attendance)
         else if (records.isEmpty)
           _emptyAttendance()
         else
@@ -983,6 +985,42 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin, 
             );
           }),
       ],
+    );
+  }
+
+  Widget _errorAttendance(AttendanceProvider attendance) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(Icons.cloud_off_rounded, size: 36, color: Colors.grey.shade300),
+          const SizedBox(height: 8),
+          Text(
+            'Could not load attendance records.',
+            textAlign: TextAlign.center,
+            style: GoogleFonts.roboto(color: Colors.grey, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          TextButton.icon(
+            onPressed: () => attendance.fetchDashboard(),
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+            label: Text('Retry', style: GoogleFonts.roboto(fontSize: 13, fontWeight: FontWeight.w600)),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFF006B3F)),
+          ),
+        ],
+      ),
     );
   }
 
