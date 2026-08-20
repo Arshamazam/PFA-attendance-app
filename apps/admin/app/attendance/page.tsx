@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
@@ -67,11 +67,18 @@ function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType
 export default function AttendancePage() {
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "ontime" | "late">("all");
   const [photoRecord, setPhotoRecord] = useState<AttendanceRecord | null>(null);
   const today = format(new Date(), "yyyy-MM-dd");
+
+  // Debounce search input — waits 500ms after last keystroke before querying
+  useEffect(() => {
+    const t = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 500);
+    return () => clearTimeout(t);
+  }, [search]);
 
   const statsQuery = useQuery<Stats>({
     queryKey: ["attendance-stats", today],
@@ -79,17 +86,21 @@ export default function AttendancePage() {
     refetchInterval: 60_000,
   });
 
-  const params = new URLSearchParams({ page: String(page), limit: String(LIMIT), ...(startDate && { startDate }), ...(endDate && { endDate }) });
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(LIMIT),
+    ...(startDate && { startDate }),
+    ...(endDate && { endDate }),
+    ...(debouncedSearch && { search: debouncedSearch }),
+  });
 
   const { data, isLoading, refetch } = useQuery({
-    queryKey: ["attendance", page, startDate, endDate],
+    queryKey: ["attendance", page, startDate, endDate, debouncedSearch],
     queryFn: () => api.get<PaginatedResponse<AttendanceRecord>>(`/attendance/all?${params}`).then((r) => r.data),
     placeholderData: (prev) => prev,
   });
 
   const records = (data?.data ?? []).filter((r) => {
-    const nameMatch = r.employee?.name?.toLowerCase().includes(search.toLowerCase());
-    if (!nameMatch) return false;
     if (statusFilter === "ontime") return !isLate(r.checkInTime);
     if (statusFilter === "late") return isLate(r.checkInTime);
     return true;

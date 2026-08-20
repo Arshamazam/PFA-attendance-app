@@ -72,6 +72,7 @@ export class AttendanceController {
     @Query('employeeId') employeeId?: string,
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string,
+    @Query('search') search?: string,
   ) {
     return this.attendanceService.getAllRecords(
       page ? parseInt(page, 10) : 1,
@@ -79,6 +80,7 @@ export class AttendanceController {
       employeeId,
       startDate,
       endDate,
+      search || undefined,
     );
   }
 

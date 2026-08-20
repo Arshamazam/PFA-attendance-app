@@ -217,6 +217,7 @@ export class AttendanceService {
     employeeId?: string,
     startDate?: string,
     endDate?: string,
+    search?: string,
   ) {
     const skip = (page - 1) * limit;
     const where: Record<string, unknown> = {};
@@ -226,6 +227,9 @@ export class AttendanceService {
         ...(startDate ? { gte: new Date(startDate) } : {}),
         ...(endDate ? { lte: new Date(endDate + 'T23:59:59.999Z') } : {}),
       };
+    }
+    if (search) {
+      where.employee = { name: { contains: search } };
     }
     const [records, total] = await Promise.all([
       this.prisma.attendance.findMany({
