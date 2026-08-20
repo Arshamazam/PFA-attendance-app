@@ -87,18 +87,35 @@ class ApiService {
         (data) => User.fromJson(data as Map<String, dynamic>),
       );
 
-  Future<String> uploadAttendancePhoto(String filePath) => _request(
-        () async {
-          final formData = FormData.fromMap({
-            'photo': await MultipartFile.fromFile(
-              filePath,
-              filename: File(filePath).uri.pathSegments.last,
-            ),
-          });
-          return _dio.post('/attendance/upload-photo', data: formData);
-        },
-        (data) => (data as Map<String, dynamic>)['url'] as String,
-      );
+  Future<String> uploadAttendancePhoto(String filePath) async {
+    DioException? lastError;
+    for (int attempt = 0; attempt < 2; attempt++) {
+      if (attempt > 0) await Future.delayed(const Duration(seconds: 3));
+      try {
+        final formData = FormData.fromMap({
+          'photo': await MultipartFile.fromFile(
+            filePath,
+            filename: File(filePath).uri.pathSegments.last,
+          ),
+        });
+        final response = await _dio.post('/attendance/upload-photo', data: formData);
+        return _handleResponse(
+          response,
+          (data) => (data as Map<String, dynamic>)['url'] as String,
+        );
+      } on DioException catch (e) {
+        lastError = e;
+      }
+    }
+    final status = lastError?.response?.statusCode;
+    if (status == 401) throw const UnauthorizedException();
+    final msg = (lastError?.response?.data is Map)
+        ? (lastError!.response!.data as Map)['message']?.toString() ??
+            lastError.message ??
+            'Upload failed'
+        : lastError?.message ?? 'Cannot connect to server';
+    throw ApiException(msg, statusCode: status);
+  }
 
   Future<List<GeofenceZone>> fetchGeofences() => _request(
         () => _dio.get('/geofence'),

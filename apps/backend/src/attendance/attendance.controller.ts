@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile } from '@nestjs/common';
+import { Controller, Post, Get, Body, Param, Query, UseGuards, UseInterceptors, UploadedFile, BadRequestException } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -35,6 +35,9 @@ export class AttendanceController {
     }),
   )
   uploadPhoto(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Photo upload failed or was interrupted. Please try again.');
+    }
     return { url: `/uploads/attendance/${file.filename}` };
   }
 

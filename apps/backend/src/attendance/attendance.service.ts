@@ -123,19 +123,36 @@ export class AttendanceService {
     if (openRecord) {
       const shiftEnd = this.shiftEndUtc(openRecord.checkInTime, openRecord.shift);
       const nowUtc = new Date();
-      // Guard: shiftEnd must be strictly after checkInTime to avoid recording
-      // a checkout time that is earlier than the check-in (data integrity).
+
+      // Helper: YYYY-MM-DD in PKT (UTC+5)
+      const pktDay = (utc: Date) =>
+        new Date(utc.getTime() + 5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+      const isFromPreviousDay = pktDay(openRecord.checkInTime) < pktDay(nowUtc);
+
+      // Auto-close if shift has ended, OR if employee has no fixed shift and the open
+      // record is from a previous PKT calendar day (prevents permanent lock-out).
       const canAutoClose =
-        shiftEnd !== null &&
-        nowUtc > shiftEnd &&
-        shiftEnd > openRecord.checkInTime;
+        (shiftEnd !== null && nowUtc > shiftEnd && shiftEnd > openRecord.checkInTime) ||
+        (shiftEnd === null && isFromPreviousDay);
 
       if (canAutoClose) {
+        let closeTime: Date;
+        if (shiftEnd !== null) {
+          closeTime = shiftEnd;
+        } else {
+          // No shift info — close at 23:59 PKT of the open record's calendar day
+          const openDay = pktDay(openRecord.checkInTime);
+          closeTime = new Date(`${openDay}T23:59:00+05:00`);
+        }
+        // Data integrity: checkout must be after check-in
+        if (closeTime <= openRecord.checkInTime) closeTime = nowUtc;
+
         await this.prisma.attendance.update({
           where: { id: openRecord.id },
-          data: { checkOutTime: shiftEnd, status: 'auto_checkout', updatedAt: nowUtc },
+          data: { checkOutTime: closeTime, status: 'auto_checkout', updatedAt: nowUtc },
         });
-        this.logger.log(`Auto checked-out record ${openRecord.id} for employee ${employeeId} at shift end`);
+        this.logger.log(`Auto checked-out record ${openRecord.id} for employee ${employeeId}`);
       } else {
         throw new BadRequestException('Already checked in. Please check out first.');
       }
