@@ -57,14 +57,20 @@ class _CheckInScreenState extends State<CheckInScreen> {
   /// Stops early if a reading is already within [targetAccuracyMeters].
   /// Updates [_gpsAttempt] so the loading UI shows live progress.
   Future<Position?> _getBestPosition({
-    int maxAttempts = 3,
-    double targetAccuracyMeters = 40.0,
+    int maxAttempts = 5,
+    double targetAccuracyMeters = 50.0,
   }) async {
     Position? best;
 
-    // Per-attempt timeouts: give first attempt longer to allow initial GPS lock,
-    // subsequent attempts are quicker since the chip is already warming up.
-    const attemptTimeouts = [Duration(seconds: 20), Duration(seconds: 15), Duration(seconds: 10)];
+    // Per-attempt timeouts: first attempt is longest to cover cold GPS chip
+    // start-up (budget Android phones can take 25-40s for first satellite lock).
+    const attemptTimeouts = [
+      Duration(seconds: 30),
+      Duration(seconds: 20),
+      Duration(seconds: 15),
+      Duration(seconds: 10),
+      Duration(seconds: 10),
+    ];
 
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       if (!mounted) break;
@@ -80,8 +86,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
           ),
         );
 
-        // Ignore readings worse than 150m — those are WiFi/IP-based, not GPS
-        if (pos.accuracy <= 150) {
+        // Accept readings up to 300m — indoors or on budget phones the GPS
+        // chip often reports 150-300m; the backend geofence (350m radius) still
+        // verifies the position server-side, so we should not discard these.
+        if (pos.accuracy <= 300) {
           if (best == null || pos.accuracy < best.accuracy) {
             best = pos;
           }
@@ -119,11 +127,10 @@ class _CheckInScreenState extends State<CheckInScreen> {
         position = await _getBestPosition();
 
         // All attempts failed or were too inaccurate — fall back to last known.
-        // Do NOT use WiFi/cell-tower location: it can be kilometers off and
-        // causes false geofence failures when the employee is actually at the office.
+        // Accept up to 300m: same threshold as live attempts.
         if (position == null) {
           final last = await Geolocator.getLastKnownPosition();
-          if (last != null && last.accuracy <= 150) position = last;
+          if (last != null && last.accuracy <= 300) position = last;
         }
       }
       _position = position;
@@ -458,9 +465,11 @@ class _CheckInScreenState extends State<CheckInScreen> {
       backgroundColor: Colors.black,
       body: switch (_step) {
         _Step.locating => _buildLoading(
-            _gpsAttempt <= 1
+            _gpsAttempt == 0
                 ? 'Getting your location...'
-                : 'Improving GPS accuracy... ($_gpsAttempt/3)',
+                : _gpsAttempt == 1
+                    ? 'Getting your location...'
+                    : 'Improving GPS signal... ($_gpsAttempt/5)\nPlease stay still and wait.',
           ),
         _Step.validating => _buildLoading('Validating office location...'),
         _Step.verified => _buildVerified(),
