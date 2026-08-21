@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Plus, Search, Pencil, Trash2, Eye, Download, RefreshCw, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowLeftRight, ArrowRight } from "lucide-react";
+import { Plus, Search, Pencil, Trash2, Eye, Download, RefreshCw, ChevronLeft, ChevronRight, X, ArrowUpDown, ArrowLeftRight, ArrowRight, KeyRound } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -77,6 +77,9 @@ export default function EmployeesPage() {
   const [toDept, setToDept] = useState("");
   const [transferDate, setTransferDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [transferReason, setTransferReason] = useState("");
+  const [resetTarget, setResetTarget] = useState<Employee | null>(null);
+  const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const debouncedSearch = useDebounce(search, 400);
 
@@ -114,6 +117,18 @@ export default function EmployeesPage() {
       setDeleteTarget(null);
     },
     onError: () => toast.error("Delete failed"),
+  });
+
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ id, password }: { id: string; password: string }) =>
+      api.patch(`/employees/${id}/reset-password`, { newPassword: password }),
+    onSuccess: () => {
+      toast.success(`Password reset successfully for ${resetTarget?.name}`);
+      setResetTarget(null);
+      setNewPassword("");
+      setShowPassword(false);
+    },
+    onError: () => toast.error("Failed to reset password"),
   });
 
   const transferMutation = useMutation({
@@ -340,6 +355,11 @@ export default function EmployeesPage() {
                             }}>
                             <ArrowLeftRight className="w-3.5 h-3.5" />
                           </Button>
+                          <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-amber-600 hover:bg-amber-50"
+                            title="Reset Password"
+                            onClick={() => { setResetTarget(emp); setNewPassword(""); setShowPassword(false); }}>
+                            <KeyRound className="w-3.5 h-3.5" />
+                          </Button>
                           <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-blue-600 hover:bg-blue-50"
                             title="Edit" onClick={() => router.push(`/employees/${emp.id}/edit`)}>
                             <Pencil className="w-3.5 h-3.5" />
@@ -381,6 +401,55 @@ export default function EmployeesPage() {
           </div>
         </div>
       </div>
+
+      {/* Reset Password dialog */}
+      <Dialog open={!!resetTarget} onOpenChange={(o) => { if (!o) { setResetTarget(null); setNewPassword(""); setShowPassword(false); } }}>
+        <DialogContent className="max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              <KeyRound size={16} className="text-amber-600" />
+              Reset Password
+            </DialogTitle>
+          </DialogHeader>
+          {resetTarget && (
+            <form onSubmit={(e) => { e.preventDefault(); if (newPassword.length < 6) { toast.error("Password must be at least 6 characters"); return; } resetPasswordMutation.mutate({ id: resetTarget.id, password: newPassword }); }} className="space-y-4 mt-1">
+              <div className="bg-gray-50 rounded-xl px-4 py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-100 flex items-center justify-center text-amber-700 text-sm font-bold shrink-0">
+                  {resetTarget.name.slice(0, 2).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{resetTarget.name}</p>
+                  <p className="text-xs text-gray-400">{resetTarget.email}</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wide">New Password</Label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? "text" : "password"}
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    placeholder="Enter new password"
+                    required
+                    className="pr-10"
+                  />
+                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    onClick={() => setShowPassword((v) => !v)}>
+                    {showPassword ? "🙈" : "👁"}
+                  </button>
+                </div>
+                <p className="text-xs text-gray-400">Minimum 6 characters</p>
+              </div>
+              <DialogFooter className="gap-2 pt-1">
+                <Button type="button" variant="outline" className="rounded-xl" onClick={() => setResetTarget(null)}>Cancel</Button>
+                <Button type="submit" disabled={resetPasswordMutation.isPending} className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl gap-2">
+                  {resetPasswordMutation.isPending ? <><span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />Resetting…</> : <><KeyRound size={14} />Reset Password</>}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Transfer dialog */}
       <Dialog open={!!transferTarget} onOpenChange={(o) => !o && setTransferTarget(null)}>
